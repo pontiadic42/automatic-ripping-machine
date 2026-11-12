@@ -144,15 +144,17 @@ def customtitle():
     job = Job.query.get(job_id)
     form = TitleSearchForm(obj=job)
     if request.args.get("title"):
+        # Clean the title like updatetitle does: it becomes part of folder and file names
+        new_title = ui_utils.clean_for_filename(request.args.get("title"))
         args = {
-            'title': request.args.get("title"),
-            'title_manual': request.args.get("title"),
+            'title': new_title,
+            'title_manual': new_title,
             'year': request.args.get("year"),
             'year_manual': request.args.get("year")
         }
         notification = Notifications(f"Job: {job.job_id} was updated",
                                      f'Title: {job.title} ({job.year}) was updated to '
-                                     f'{request.args.get("title")} ({request.args.get("year")})')
+                                     f'{new_title} ({request.args.get("year")})')
         db.session.add(notification)
         ui_utils.database_updater(args, job)
         flash(f'Custom title changed. Title={job.title}, Year={job.year}.', "success")

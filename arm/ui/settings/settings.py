@@ -424,6 +424,7 @@ def drive_manual(manual_id):
 
 
 @route_settings.route('/testapprise')
+@login_required
 def testapprise():
     """
     Page - testapprise

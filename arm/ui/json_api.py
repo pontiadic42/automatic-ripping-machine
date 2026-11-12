@@ -3,8 +3,8 @@ Basic json api for access to A.R.M UI
 Also used to connect to both omdb and tmdb
 """
 import os
-import subprocess
 import re
+import signal
 import html
 from collections import deque
 from pathlib import Path
@@ -614,12 +614,12 @@ def get_notify_timeout(notify_timeout):
 
 
 def restart_ui():
+    """
+    Stop only the web UI's own process; its service supervisor (runit in the
+    container) starts it again. "pkill python3" also killed every running rip.
+    """
     app.logger.debug("Arm ui shutdown....")
-    shutdown_code = subprocess.check_output(
-        "pkill python3",
-        shell=True
-    ).decode("utf-8")
-    # Nothing should work past here as the ui will die after running code above
-    app.logger.debug(f"Arm ui shutdown ran into a problem... exit code: {shutdown_code}")
-    return_json = {'success': False, 'error': f"Shutting down A.R.M UI....exit code: {shutdown_code}"}
+    os.kill(os.getpid(), signal.SIGTERM)
+    # Normally not reached: the ui exits on SIGTERM
+    return_json = {'success': False, 'error': "Shutting down A.R.M UI...."}
     return return_json

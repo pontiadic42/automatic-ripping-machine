@@ -604,7 +604,8 @@ def makemkv_info(job, select=None, index=9999, options=None):
     max_processes = cfg.arm_config["MAX_CONCURRENT_MAKEMKVINFO"]
     job.status = JobState.VIDEO_WAITING.value
     db.session.commit()
-    utils.sleep_check_process("makemkvcon", max_processes, sleep=(10, wait_time, 10))
+    # randrange(10, wait_time, 10) raises ValueError when MANUAL_WAIT_TIME <= 10
+    utils.sleep_check_process("makemkvcon", max_processes, sleep=(10, max(wait_time, 20), 10))
     job.status = JobState.VIDEO_INFO.value
     db.session.commit()
     try:
@@ -980,7 +981,8 @@ def progress_log(job):
     """
     logfile = os.path.join(job.config.LOGPATH, "progress", f"{job.job_id:d}.log")
     logging.debug(f"logging progress to '{logfile}'")
-    return shlex.quote(logfile)
+    # Plain path: it is passed as one argv element (no shell) and used to build the .batchinfo file name
+    return logfile
 
 
 class TrackInfoProcessor:

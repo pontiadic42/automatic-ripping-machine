@@ -653,7 +653,8 @@ def _job_summary(job):
         'logfile': job.logfile,
         'errors': job.errors,
         'devpath': job.devpath,
-        'stop_time': job.stop_time.isoformat() if job.stop_time else None,
+        # Stored without a time zone in the server's local time; send the offset so browsers don't misread it
+        'stop_time': job.stop_time.astimezone().isoformat() if job.stop_time else None,
         'identified': _is_identified(job) or job.disctype == "music",
     }
 

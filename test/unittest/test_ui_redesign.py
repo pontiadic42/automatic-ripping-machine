@@ -40,7 +40,9 @@ class TestIdentifiedRule(unittest.TestCase):
     def test_summary_has_iso_stop_time_and_flags(self):
         summary = json_api._job_summary(make_job(status="fail", stop_time=None))
         self.assertIsNone(summary["stop_time"])
-        self.assertEqual(json_api._job_summary(make_job())["stop_time"], "2026-11-12T03:04:05")
+        stop = json_api._job_summary(make_job())["stop_time"]
+        self.assertTrue(stop.startswith("2026-11-12T03:04:05"))
+        self.assertRegex(stop, r"[+-]\d\d:\d\d$")
         self.assertTrue(json_api._job_summary(make_job(disctype="music", hasnicetitle=False))["identified"])
 
 

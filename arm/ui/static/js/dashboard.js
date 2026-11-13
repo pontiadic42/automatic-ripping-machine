@@ -66,9 +66,9 @@
 
     function driveName(drive) {
         const dev = blank(drive.mount) ? drive.name : String(drive.mount).replace("/dev/", "");
-        const kind = String(drive.type || "").indexOf("BluRay") >= 0 ? "Blu-ray" :
-            (String(drive.type || "").indexOf("DVD") >= 0 ? "DVD" : "CD");
-        return `${dev} · ${kind}${blank(drive.model) ? "" : " · " + String(drive.model).trim()}`;
+        const type = String(drive.type || "");
+        const kind = type.indexOf("BluRay") >= 0 ? "Blu-ray" : (type.indexOf("DVD") >= 0 ? "DVD" : (type ? "CD" : ""));
+        return [dev, kind, blank(drive.model) ? "" : String(drive.model).trim()].filter(Boolean).join(" · ");
     }
 
     /** 0 identify, 1 rip, 2 transcode, 3 finish */
@@ -183,7 +183,7 @@
         const pct = progressOf(job);
         const showBar = pct !== null && phaseOf(job) > 0;
         const meta = [etaText(job), trackText(job)].filter(Boolean).join(" · ");
-        const type = blank(job.video_type) || job.video_type === "unknown" ? (job.disctype || "") : job.video_type;
+        const type = blank(job.video_type) || job.video_type === "unknown" ? "" : (job.video_type === "series" ? "TV" : (job.video_type === "movie" ? "Movie" : job.video_type));
         return `<div class="arm-card arm-bay">
             <a href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">${posterHtml(job.poster_url, jobTitle(job), "w185")}</a>
             <div class="arm-bay-body">
@@ -253,11 +253,12 @@
             return `<div class="arm-empty">Finished rips show up here.</div>`;
         }
         return recent.map(function (job) {
-            let sub = `<p class="arm-tile-sub">${esc(timeAgo(job.stop_time))}</p>`;
+            const when = timeAgo(job.stop_time);
+            let sub = `<p class="arm-tile-sub">${esc(when)}</p>`;
             if (job.status === "fail") {
-                sub = `<p class="arm-tile-sub bad">Failed · ${esc(timeAgo(job.stop_time))}</p>`;
+                sub = `<p class="arm-tile-sub bad">Failed${when ? " · " + esc(when) : ""}</p>`;
             } else if (!job.identified) {
-                sub = `<p class="arm-tile-sub warn">Unidentified · ${esc(timeAgo(job.stop_time))}</p>`;
+                sub = `<p class="arm-tile-sub warn">Unidentified${when ? " · " + esc(when) : ""}</p>`;
             }
             return `<a class="arm-tile" href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">
                 ${posterHtml(job.poster_url, jobTitle(job), "w185")}
@@ -281,6 +282,14 @@
             `Transcoding <b>${hw.length ? hw.join(", ") : "software"}</b>`,
             `ARM <b>${esc(stats.version)}</b>`
         ].filter(Boolean).map(function (s) { return `<span>${s}</span>`; }).join("");
+    }
+
+    const lastHtml = {};
+    function setHtml(id, html) {
+        if (lastHtml[id] !== html) {
+            lastHtml[id] = html;
+            document.getElementById(id).innerHTML = html;
+        }
     }
 
     function render() {
@@ -307,14 +316,15 @@
         if (!bays) {
             bays = `<div class="arm-card arm-empty">No drives found yet.</div>`;
         }
-        $("#armBays").html(bays);
+        setHtml("armBays", bays);
 
         const processing = jobs.filter(function (job) { return !used[job.job_id]; });
-        $("#armProcessing").html(processing.map(rowHtml).join("")).toggle(processing.length > 0);
-        $("#armAttention").html(attentionHtml(jobs, dashboard ? dashboard.recent : []));
+        setHtml("armProcessing", processing.map(rowHtml).join(""));
+        $("#armProcessing").toggle(processing.length > 0);
+        setHtml("armAttention", attentionHtml(jobs, dashboard ? dashboard.recent : []));
         if (dashboard) {
-            $("#armRecent").html(recentHtml(dashboard.recent));
-            $("#armStats").html(statsHtml(dashboard.stats));
+            setHtml("armRecent", recentHtml(dashboard.recent));
+            setHtml("armStats", statsHtml(dashboard.stats));
         }
         $("#armUpdated").text(jobs.length ? `${jobs.length} active job${jobs.length > 1 ? "s" : ""}` : "Idle");
     }

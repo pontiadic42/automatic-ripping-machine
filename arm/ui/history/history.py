@@ -55,7 +55,7 @@ LIBRARY_FILTERS = ("all", "movie", "series", "music", "unidentified", "failed")
 
 def _library_filter(query, name):
     """Narrow a Job query to one of the library filter chips"""
-    unidentified = db.and_(Job.status == "success", Job.disctype != "music", Job.title_manual.is_(None),
+    unidentified = db.and_(Job.status == "success", Job.disctype != "music",
                            db.or_(Job.hasnicetitle.isnot(True), Job.video_type == "unknown",
                                   Job.title.is_(None), db.func.lower(Job.title).in_(["none", "not identified"])))
     if name == "movie":

@@ -107,7 +107,7 @@ h1, h2, h3, h4, h5 { color: var(--arm-text); }
 .arm-card { background: var(--arm-surface); border: 1px solid var(--arm-border); border-radius: var(--arm-radius); }
 
 /* ---------- Buttons and pills ---------- */
-.arm-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 5px 12px; border-radius: 7px;
+.arm-btn { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 7px;
     border: 1px solid var(--arm-border-strong); background: var(--arm-surface); color: var(--arm-text) !important;
     text-decoration: none !important; cursor: pointer; line-height: 1.4; }
 .arm-btn:hover { background: var(--arm-surface-2); }
@@ -222,6 +222,9 @@ html .alert .alert-heading { font-size: 15px; margin: 0; }
 html .text-muted { color: var(--arm-muted) !important; }
 html .bg-light, html[data-theme="dark"] .bg-light { background: var(--arm-surface-2) !important; color: var(--arm-text) !important; }
 
+/* The old pages open with a big logo and "Welcome to your Automatic Ripping Machine"; the top bar replaces it */
+#content .rounded.text-center:has(> img[src$="arm80.png"]) { display: none; }
+
 /* ---------- Phones: activity-feed layout ---------- */
 @media (max-width: 720px) {
     html body, html[data-theme="dark"] body { padding-top: 56px !important; }
@@ -249,4 +252,7 @@ html .bg-light, html[data-theme="dark"] .bg-light { background: var(--arm-surfac
     .arm-stats { gap: 12px; }
     .arm-attn { flex-wrap: wrap; }
     .arm-attn .arm-attn-actions { margin-left: 0; }
+    .arm-row { flex-wrap: wrap; }
+    .arm-row .arm-row-main { flex-basis: calc(100% - 24px); }
+    .arm-row .arm-row-side { padding-left: 21px; }
 }

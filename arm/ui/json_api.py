@@ -634,9 +634,7 @@ PLACEHOLDER_TITLES = ("", "none", "not identified")
 
 
 def _is_identified(job):
-    """True when the job has a real title (looked up, or entered by the user)"""
-    if job.title_manual:
-        return True
+    """True when ARM matched the disc to a title (otherwise it files the rip under unidentified)"""
     title = str(job.title or "").strip().lower()
     return bool(job.hasnicetitle) and title not in PLACEHOLDER_TITLES and job.video_type != "unknown"
 
@@ -682,7 +680,7 @@ def get_dashboard():
         })
 
     recent = Job.query.filter(Job.status.in_([JobState.SUCCESS.value, JobState.FAILURE.value])) \
-        .order_by(db.desc(Job.job_id)).limit(12).all()
+        .order_by(db.desc(Job.job_id)).limit(8).all()
 
     server = ServerUtil()
     try:

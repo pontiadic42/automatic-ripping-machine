@@ -628,3 +628,77 @@ def restart_ui():
     # Normally not reached: the ui exits on SIGTERM
     return_json = {'success': False, 'error': "Shutting down A.R.M UI...."}
     return return_json
+
+
+PLACEHOLDER_TITLES = ("", "none", "not identified")
+
+
+def _is_identified(job):
+    """True when the job has a real title (looked up, or entered by the user)"""
+    if job.title_manual:
+        return True
+    title = str(job.title or "").strip().lower()
+    return bool(job.hasnicetitle) and title not in PLACEHOLDER_TITLES and job.video_type != "unknown"
+
+
+def _job_summary(job):
+    """The fields the home page and library need for one job"""
+    return {
+        'job_id': job.job_id,
+        'title': job.title,
+        'year': job.year,
+        'label': job.label,
+        'video_type': job.video_type,
+        'disctype': job.disctype,
+        'status': job.status,
+        'poster_url': job.poster_url,
+        'logfile': job.logfile,
+        'errors': job.errors,
+        'devpath': job.devpath,
+        'stop_time': job.stop_time.isoformat() if job.stop_time else None,
+        'identified': _is_identified(job) or job.disctype == "music",
+    }
+
+
+def get_dashboard():
+    """
+    Data for the home page that changes slowly: the drives, recently finished jobs and server stats.
+    Active jobs come from the joblist call, which is polled more often.
+    """
+    from arm.models.system_drives import SystemDrives
+    from arm.ui.settings.ServerUtil import ServerUtil
+    from arm.ui.settings.settings import check_hw_transcode_support
+
+    drives = []
+    for drive in SystemDrives.query.filter(SystemDrives.stale.isnot(True)).order_by(SystemDrives.mount).all():
+        if not drive.mount:
+            continue
+        drives.append({
+            'name': drive.name,
+            'mount': drive.mount,
+            'model': f"{drive.model or ''}".strip(),
+            'type': drive.type,
+            'job_id_current': drive.job_id_current,
+        })
+
+    recent = Job.query.filter(Job.status.in_([JobState.SUCCESS.value, JobState.FAILURE.value])) \
+        .order_by(db.desc(Job.job_id)).limit(12).all()
+
+    server = ServerUtil()
+    try:
+        with open(os.path.join(cfg.arm_config['INSTALLPATH'], 'VERSION')) as version_file:
+            version = version_file.read().strip()
+    except OSError:
+        version = ""
+    stats = {
+        'cpu': server.cpu_util,
+        'temp': server.cpu_temp,
+        'memory_percent': server.memory_percent,
+        'completed_free': server.storage_completed_free,
+        'completed_percent': server.storage_completed_percent,
+        'transcode_free': server.storage_transcode_free,
+        'hw': check_hw_transcode_support(),
+        'version': version,
+    }
+    return {'success': True, 'mode': 'dashboard', 'drives': drives,
+            'recent': [_job_summary(job) for job in recent], 'stats': stats}

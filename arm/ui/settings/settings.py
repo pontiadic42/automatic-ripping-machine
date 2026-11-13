@@ -19,6 +19,7 @@ import importlib
 import re
 import subprocess
 from datetime import datetime
+from functools import lru_cache
 import os
 
 import sqlalchemy
@@ -144,7 +145,12 @@ def settings():
                            abcde_read_only=is_read_only(cfg.abcde_config_path))
 
 
+@lru_cache(maxsize=1)
 def check_hw_transcode_support():
+    """
+    Ask HandBrake which hardware encoders work. The hardware doesn't change while
+    the UI runs, so the answer is kept instead of starting HandBrake on every page load.
+    """
     cmd = f"nice {cfg.arm_config['HANDBRAKE_CLI']}"
 
     app.logger.debug(f"Sending command: {cmd}")

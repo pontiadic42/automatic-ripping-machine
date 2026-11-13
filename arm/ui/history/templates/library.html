@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="arm-head">
+        <h1>Library</h1>
+        <span class="arm-faint" style="font-size:13px">{{ pages.total }} job{{ "" if pages.total == 1 else "s" }}</span>
+    </div>
+    <div class="arm-chips">
+        {% for name, label in filter_names.items() %}
+            <a class="arm-chip{% if name == selected %} active{% endif %}"
+               href="{{ url_for('route_history.library', filter=name, q=search or None) }}">{{ label }}<span class="arm-count">{{ counts[name] }}</span></a>
+        {% endfor %}
+        <form class="arm-search" method="get" action="{{ url_for('route_history.library') }}" role="search">
+            <input type="hidden" name="filter" value="{{ selected }}">
+            <input type="search" name="q" value="{{ search }}" placeholder="Search titles and disc labels" aria-label="Search">
+        </form>
+    </div>
+
+    {% if jobs %}
+        <div class="arm-grid">
+            {% for job in jobs %}
+                {% set title = job.title if job.title and job.title|lower not in ["none", "not identified"]
+                   else (job.label|replace("_", " ") if job.label and job.label != "None" else "Unlabelled disc") %}
+                {% set poster = job.poster_url|replace("/t/p/original/", "/t/p/w342/")
+                   if job.poster_url and job.poster_url not in ["None", "N/A"] else "" %}
+                <a class="arm-tile" href="/jobdetail?job_id={{ job.job_id }}">
+                    <div class="arm-poster arm-ph" data-name="{{ title }}">
+                        {% if poster %}<img src="{{ poster }}" alt="" loading="lazy" onerror="this.remove()">{% endif %}
+                        <span class="arm-initials">{{ title }}</span>
+                        {% if job.status == "fail" %}<span class="arm-corner arm-pill bad">Failed</span>
+                        {% elif job.status not in ["success"] %}<span class="arm-corner arm-pill now">{{ job.status|capitalize }}</span>
+                        {% elif not job.identified %}<span class="arm-corner arm-pill warn">Unidentified</span>{% endif %}
+                    </div>
+                    <p class="arm-tile-title">{{ title }}</p>
+                    <p class="arm-tile-sub">
+                        {%- if job.year and job.year not in ["None", "0000"] %}{{ job.year }} · {% endif -%}
+                        {%- if job.disctype == "music" %}Music{% elif job.video_type == "series" %}TV{% elif job.video_type == "movie" %}Movie{% else %}{{ job.disctype|upper }}{% endif -%}
+                        {%- if job.stop_time %} · {{ job.stop_time[:10] }}{% endif -%}
+                    </p>
+                </a>
+            {% endfor %}
+        </div>
+        {% if pages.pages > 1 %}
+            <div class="arm-pager">
+                {% if pages.has_prev %}<a class="arm-btn" href="{{ url_for('route_history.library', filter=selected, q=search or None, page=pages.prev_num) }}">Newer</a>{% endif %}
+                <span class="arm-muted">Page {{ pages.page }} of {{ pages.pages }}</span>
+                {% if pages.has_next %}<a class="arm-btn" href="{{ url_for('route_history.library', filter=selected, q=search or None, page=pages.next_num) }}">Older</a>{% endif %}
+            </div>
+        {% endif %}
+    {% else %}
+        <div class="arm-card arm-empty">
+            {% if search %}Nothing matches "{{ search }}".{% else %}No jobs here yet.{% endif %}
+        </div>
+    {% endif %}
+
+    <script type="application/javascript">
+        $(function () {
+            activeTab("library");
+            const palette = [["#CECBF6", "#3C3489"], ["#9FE1CB", "#085041"], ["#F5C4B3", "#712B13"], ["#B5D4F4", "#0C447C"],
+                ["#FAC775", "#633806"], ["#F4C0D1", "#72243E"], ["#C0DD97", "#27500A"], ["#D3D1C7", "#444441"]];
+            document.querySelectorAll(".arm-ph").forEach(function (el) {
+                const name = el.dataset.name || "";
+                let h = 0;
+                for (let i = 0; i < name.length; i++) { h = (h * 31 + name.charCodeAt(i)) % 9973; }
+                const c = palette[h % palette.length];
+                el.style.background = c[0];
+                el.querySelector(".arm-initials").style.color = c[1];
+            });
+        });
+    </script>
+{% endblock %}

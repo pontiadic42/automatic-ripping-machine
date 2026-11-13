@@ -11,7 +11,7 @@ import re
 from datetime import datetime
 from pathlib import Path
 from sqlalchemy.exc import SQLAlchemyError
-from time import strftime, localtime, time, sleep
+from time import strftime, localtime, time, sleep, monotonic
 
 import bcrypt
 import requests
@@ -33,6 +33,9 @@ from arm.ui.settings import DriveUtils
 
 # Path definitions
 path_migrations = "arm/migrations"
+
+# current git hash -> (time checked, up to date?) for git_check_updates()
+_git_update_cache = {}
 
 
 def database_updater(args, job, wait_time=90):
@@ -901,6 +904,11 @@ def git_check_updates(current_hash) -> bool:
     :return:
         arm_current: Bool - True for no update (or exceptions), False for update possible
     """
+    # The settings page calls this on every load; ask GitHub at most every 6 hours
+    cached = _git_update_cache.get(current_hash)
+    if cached and monotonic() - cached[0] < 6 * 3600:
+        return cached[1]
+
     # GitHub API url - branch main
     url = "https://api.github.com/repos/automatic-ripping-machine/automatic-ripping-machine/commits/main"
     arm_current = True      # set True, any exceptions will return a true value
@@ -923,6 +931,7 @@ def git_check_updates(current_hash) -> bool:
     except requests.RequestException as e:
         app.logger.error(f"GitHub API request failed: {e}")
 
+    _git_update_cache[current_hash] = (monotonic(), arm_current)
     return arm_current
 
 

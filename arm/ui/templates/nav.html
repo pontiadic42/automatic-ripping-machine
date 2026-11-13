@@ -1,71 +1,79 @@
 {% block nav %}
-    <!-- TOAST -->
+    <!-- Toasts -->
     <div aria-live="polite" aria-atomic="true">
-        <!-- Position it -->
-        <div id="toastHolder" style="position: fixed; top: 30%; right: 10%;z-index: 1000;">
-            <!-- TOASTS -->
-        </div>
+        <div id="toastHolder" style="position: fixed; top: 70px; right: 16px; z-index: 1040;"></div>
     </div>
-    <!-- Main -->
-    <div class="container h-100 mx-auto">
-        <nav class="navbar navbar-expand-md navbar-dark bg-primary justify-content-center fixed-top my-auto">
-            <a class="navbar-brand" href="index.html">
-                <img src="{{ url_for('static', filename='img/arm40nw.png') }}" width="114" height="40" alt="">
-            </a>
-            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarSupportedContent">
-                <ul class="navbar-nav">
-                    <li id="navhome" class="nav-item">
-                        <a class="nav-link" href="index.html">Home</a>
-                    </li>
-                    <li id="navhistory" class="nav-item">
-                        <a class="nav-link" href="history">History</a>
-                    </li>
-                    <li id="navviewlogs" class="nav-item">
-                        <a class="nav-link" href="listlogs">View Logs</a>
-                    </li>
-                    <li id="navdatabase" class="nav-item">
-                        <a class="nav-link" href="database">Database</a>
-                    </li>
-                    <li id="navarmsettings" class="nav-item">
-                        <a class="nav-link" href="settings"> Settings</a>
-                    </li>
-                    <li id="navsendmovies" class="nav-item">
-                        <a class="nav-link" href="send_movies"> Send DVDs to API</a>
-                    </li>
-                    <li id="navchangepass" class="nav-item">
-                        <a class="nav-link" href="update_password"> Change admin password</a>
-                    </li>
-                    <li id="navlogout" class="nav-item">
-                        <a class="nav-link" href="logout"> Logout</a>
-                    </li>
-                    <li id="notificationview" class="nav-item">
-                        {% include 'navnotify.html' %}
-                    </li>
-                    <li id="restart" class="nav-item">
-                        <a class="nav-link" href="#">
-                            <button type="button" class="btn btn-primary position-relative" id="restartUi" >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round"
-                                     stroke-linejoin="round">
-                                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
-                                    <line x1="12" y1="2" x2="12" y2="12"></line>
-                                </svg>
-                            </button>
-                        </a>
-                    </li>
-                </ul>
-            </div>
-
-            <div class="custom-control custom-switch">
-                <input type="checkbox" class="custom-control-input" id="darkSwitch"/>
-                <label class="custom-control-label align-left" for="darkSwitch">Dark Mode</label>
-            </div>
-            <script src="{{ url_for('static', filename='js/dark-mode-switch.min.js') }}"></script>
-            <link rel="stylesheet" href="{{ url_for('static', filename='css/dark-mode.css') }}">
-
+    <header class="arm-top">
+        <a class="arm-brand" href="/" aria-label="ARM home">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>
+            <span>{{ session.get("arm_name") or "ARM" }}</span>
+        </a>
+        <nav class="arm-links">
+            <span id="navhome"><a href="/">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/></svg>Drives</a></span>
+            <span id="navlibrary"><a href="/library">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+                    <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>Library</a></span>
+            <span id="navviewlogs"><a href="/listlogs">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M9 13h6M9 17h6"/></svg>Logs</a></span>
+            <span id="navarmsettings"><a href="/settings">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>Settings</a></span>
         </nav>
-    </div>
+        <div class="arm-right">
+            <a class="arm-iconbtn" id="notificationview" href="/notificationview" aria-label="Notifications">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+                {% if notify_count %}<span class="arm-badge-dot">{{ notify_count }}</span>{% endif %}
+            </a>
+            <div class="arm-menu-wrap">
+                <button class="arm-iconbtn" id="armMoreBtn" type="button" aria-label="More" aria-haspopup="true" aria-expanded="false">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                        <circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg>
+                </button>
+                <div class="arm-menu" id="armMoreMenu" role="menu">
+                    <a id="navhistory" href="/history" role="menuitem">Job history table</a>
+                    <a id="navdatabase" href="/database" role="menuitem">Database</a>
+                    <a id="navsendmovies" href="/send_movies" role="menuitem">Send DVDs to API</a>
+                    <hr>
+                    <label for="darkSwitch" role="menuitem">Dark mode <input type="checkbox" id="darkSwitch"/></label>
+                    <a id="navchangepass" href="/update_password" role="menuitem">Change admin password</a>
+                    <button type="button" id="restartUi" role="menuitem">Restart web UI</button>
+                    <a id="navlogout" class="arm-danger-item" href="/logout" role="menuitem">Log out</a>
+                </div>
+            </div>
+        </div>
+        <script src="{{ url_for('static', filename='js/dark-mode-switch.min.js') }}"></script>
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/dark-mode.css') }}">
+        <link rel="stylesheet" href="{{ url_for('static', filename='css/arm-modern.css') }}">
+        <script type="application/javascript">
+            (function () {
+                const btn = document.getElementById("armMoreBtn");
+                const menu = document.getElementById("armMoreMenu");
+                btn.addEventListener("click", function (event) {
+                    event.stopPropagation();
+                    const open = menu.classList.toggle("open");
+                    btn.setAttribute("aria-expanded", open ? "true" : "false");
+                });
+                document.addEventListener("click", function (event) {
+                    if (!menu.contains(event.target)) {
+                        menu.classList.remove("open");
+                        btn.setAttribute("aria-expanded", "false");
+                    }
+                });
+                document.getElementById("restartUi").addEventListener("click", function () {
+                    if (!confirm("Restart the ARM web UI? Rips keep running.")) {
+                        return;
+                    }
+                    fetch("/json?mode=restart").catch(function () {});
+                    document.body.style.opacity = "0.5";
+                    setTimeout(function () { window.location.reload(); }, 6000);
+                });
+            })();
+        </script>
+    </header>
 {% endblock %}

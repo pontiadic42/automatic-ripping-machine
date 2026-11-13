@@ -340,7 +340,9 @@ def feed_json():
             'send_item': {'funct': ui_utils.send_to_remote_db, 'args': ('j_id',)},
             'change_job_params': {'funct': json_api.change_job_params, 'args': ('config_id',)},
             'read_notification': {'funct': json_api.read_notification, 'args': ('notify_id',)},
-            'notify_timeout': {'funct': json_api.get_notify_timeout, 'args': ('notify_timeout',)}
+            'notify_timeout': {'funct': json_api.get_notify_timeout, 'args': ('notify_timeout',)},
+            'dashboard': {'funct': json_api.get_dashboard, 'args': ()},
+            'restart': {'funct': json_api.restart_ui, 'args': ()},
         }
     else:
         valid_data = {

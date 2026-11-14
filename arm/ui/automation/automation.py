@@ -96,7 +96,11 @@ def job_action():
             store.clear_attention(job_id, "confidence")
             message = f"Kept {name}."
     elif action == "dismiss":
-        store.clear_attention(job_id, request.form.get("kind") or "confidence")
+        kind = request.form.get("kind") or "confidence"
+        store.clear_attention(job_id, kind)
+        if kind == "failed":
+            # The "failed in the last 24 hours" banner isn't a stored item; remember it was dismissed
+            store.update_job(job_id, dismissed_failure=True)
         message = "Dismissed."
     elif action == "cancel":
         if job.finished:

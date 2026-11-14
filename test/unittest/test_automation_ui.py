@@ -105,6 +105,10 @@ class TestJobActions(Temp):
         self.post(self.job(), "dismiss", kind="confidence")
         self.assertEqual([i["kind"] for i in store.load_job(7)["attention"]], ["length"])
 
+    def test_dismiss_a_failure_banner_is_remembered(self):
+        self.post(self.job(finished=True, status="fail"), "dismiss", kind="failed")
+        self.assertTrue(store.load_job(7)["dismissed_failure"])
+
     def test_cancel_stops_a_running_job_only(self):
         store.add_attention(7, "confidence", "Not sure")
         with patch("arm.ui.json_api.abandon_job", return_value={"success": True}) as abandon:

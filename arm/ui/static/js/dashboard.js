@@ -303,13 +303,17 @@
         });
         const dayAgo = Date.now() - 24 * 3600 * 1000;
         (recent || []).filter(function (job) {
+            const info = auto[String(job.job_id)] || {};
             return job.status === "fail" && job.stop_time && Date.parse(job.stop_time) > dayAgo &&
-                !String(job.errors || "").startsWith("Skipped") && !shown[job.job_id];
+                !String(job.errors || "").startsWith("Skipped") && !shown[job.job_id] && !info.dismissed_failure;
         }).forEach(function (job) {
+            const info = auto[String(job.job_id)] || {};
             html += `<div class="arm-attn bad">
                 <span>${esc(jobTitle(job))} failed${blank(job.errors) ? "" : ": " + esc(String(job.errors).slice(0, 140))}</span>
-                <span class="arm-attn-actions"><a href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">Details</a>
-                <a href="logs?logfile=${encodeURIComponent(job.logfile)}&mode=full">Log</a></span></div>`;
+                <span class="arm-attn-actions"><a class="arm-btn" href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">Details</a>
+                <a class="arm-btn" href="logs?logfile=${encodeURIComponent(job.logfile)}&mode=full">Log</a>
+                ${info.has_files ? actionButton(job.job_id, "delete_files", "Delete files") : ""}
+                ${actionButton(job.job_id, "dismiss", "Dismiss", ' data-kind="failed"')}</span></div>`;
         });
         return html;
     }

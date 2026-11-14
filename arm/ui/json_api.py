@@ -723,7 +723,8 @@ def _automation_summary():
             "title_known": str(title or "").strip().lower() not in ("", "none", "not identified"),
             "finished": job.status in (JobState.SUCCESS.value, JobState.FAILURE.value),
             "has_files": bool(job.path and os.path.isdir(job.path) and not data.get("files_deleted")),
+            "dismissed_failure": bool(data.get("dismissed_failure")),
         }
-        if entry["confidence"] is not None or entry["attention"]:
+        if entry["confidence"] is not None or entry["attention"] or entry["finished"]:
             result[str(job.job_id)] = entry
     return {"jobs": result, "ntfy": settings.ntfy_enabled()}

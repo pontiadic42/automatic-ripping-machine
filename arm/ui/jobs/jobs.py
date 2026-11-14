@@ -43,13 +43,49 @@ def _title_base(job):
 
 def _automation_view(job):
     """Automation record for the job page: confidence, titles, files, checks"""
-    from arm.automation import store
+    from arm.automation import organize, store
     data = store.load_job(job.job_id)
-    files = data.get("files") or []
-    data["frames"] = [{"index": i, "label": os.path.basename(f["file"]), "role": f["role"]}
-                      for i, f in enumerate(files) if f["role"] in ("main", "language")] \
-        if (data.get("titles") or {}).get("ambiguous_language") else []
+    if data.get("titles") and "files" in data:
+        # Jobs organized before outcomes were recorded: work them out from the files
+        data["titles"] = organize.with_outcomes(data["titles"], data["files"])
+        if not data["titles"].get("ambiguous_language"):
+            data["attention"] = [a for a in data.get("attention") or [] if a.get("kind") != "language"]
+    data["versions"] = _versions(data)
     return data
+
+
+def _size_text(path):
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        return ""
+    return f"{size / 1e9:.1f} GB" if size >= 1e9 else f"{size / 1e6:.0f} MB"
+
+
+def _clock(seconds):
+    seconds = int(seconds or 0)
+    return f"{seconds // 3600}:{seconds % 3600 // 60:02d}:{seconds % 60:02d}" if seconds >= 3600 \
+        else f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _versions(data):
+    """The language versions to choose between, each with stills, length, size and tracks"""
+    from arm.automation import organize
+    choices = organize.version_files(data)
+    if len(choices) < 2:
+        return []
+    by_tid = {t["tid"]: t for t in (data.get("titles") or {}).get("titles") or []}
+    versions = []
+    for index, entry in choices:
+        title = by_tid.get(entry.get("tid"), {})
+        seconds = int(title.get("seconds") or 0)
+        times = [at for at in (90, 300, 600) if not seconds or at < seconds - 30] or [max(1, seconds // 2)]
+        versions.append({"index": index, "tid": entry.get("tid"), "name": os.path.basename(entry["file"]),
+                         "label": "Main feature" if entry.get("role") == "main" else (title.get("label") or ""),
+                         "length": _clock(seconds) if seconds else "", "size": _size_text(entry["file"]),
+                         "audio": title.get("audio") or [], "subtitles": title.get("subtitles") or [],
+                         "stills": [{"at": at, "clock": _clock(at)} for at in times]})
+    return versions
 
 
 def _retitle_finished(job, old_path, old_base):

@@ -80,7 +80,8 @@ def job_action():
     """
     Buttons on the home page banner and the job page:
     accept (keep ARM's guessed title), cancel (stop a running job), delete_files (remove a
-    finished job's output folder), dismiss (hide a banner item).
+    finished job's output folder), dismiss (hide a banner item), keep_version (keep one
+    language version and delete the others), keep_all (keep every language version).
     """
     job_id = request.form.get("job", type=int)
     action = request.form.get("action", "")
@@ -124,9 +125,28 @@ def job_action():
         from arm.automation import jellyfin
         jellyfin.announce(None, folder)
         message = f"Deleted {folder}."
+    elif action in ("keep_version", "keep_all"):
+        return _version_action(job, action)
     else:
         return {"success": False, "message": "Unknown action"}, 400
     return {"success": True, "message": message}
+
+
+def _version_action(job, action):
+    """Language versions ARM couldn't tell apart: keep the one picked (deleting the others), or all"""
+    from arm.automation import organize
+    if not job.finished:
+        return {"success": False, "message": "Wait for the job to finish first."}, 400
+    if action == "keep_all":
+        organize.keep_all_versions(job)
+        return {"success": True, "message": "Keeping every version."}
+    try:
+        kept, deleted = organize.keep_version(job, request.form.get("file", type=int))
+    except ValueError as error:
+        return {"success": False, "message": str(error)}, 400
+    app.logger.info(f"Job {job.job_id}: kept {kept}, deleted {deleted} from the web UI")
+    return {"success": True, "message": f"Kept {os.path.basename(kept)} and deleted {len(deleted)} other "
+                                        f"version{'s' if len(deleted) != 1 else ''}."}
 
 
 def _form_value(setting):

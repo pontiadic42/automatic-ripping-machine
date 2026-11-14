@@ -290,6 +290,11 @@ html .bg-light, html[data-theme="dark"] .bg-light { background: var(--arm-surfac
 .arm-auto-frames img { width: 100%; border-radius: 8px; background: var(--arm-surface-2); min-height: 120px; }
 .arm-auto-frames figcaption { font-size: 12px; color: var(--arm-muted); margin-top: 4px; word-break: break-all; }
 .arm-auto-files { font-size: 12px; padding-left: 18px; }
+.arm-auto-version { border: 1px solid var(--arm-border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+.arm-auto-version-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+.arm-auto-version-head code { word-break: break-all; }
+.arm-auto-version .arm-auto-frames { margin-bottom: 6px; }
+.arm-auto-version-facts { font-size: 12px; margin: 0; }
 .arm-bay-title .arm-pill { vertical-align: middle; margin-left: 6px; font-weight: 400; }
 @media (max-width: 720px) {
     .arm-auto-row { grid-template-columns: 1fr; gap: 8px; }

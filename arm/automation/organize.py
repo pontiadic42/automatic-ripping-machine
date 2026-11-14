@@ -185,7 +185,112 @@ def organize(job, source_dir, final_dir, decisions):
         shutil.move(source, target)
         moved.append({"tid": decision["tid"], "role": decision["role"], "file": target})
     store.update_job(job.job_id, files=moved, episodes=episode_note or None, length_problems=problems)
+    record_outcomes(job, moved)
     return problems
+
+
+VERSION_ROLES = ("main", "language")
+
+
+def with_outcomes(titles, files):
+    """
+    Title analysis plus what really came out of the rip: each title gets an outcome,
+    "ripped" (a file was made), "missing" (planned, but no file: MakeMKV didn't write it)
+    or "skipped" (not planned). When fewer than two of the language versions ARM couldn't
+    tell apart made a file, there's nothing to choose between any more.
+    """
+    titles = dict(titles or {})
+    written = {entry.get("tid") for entry in files or []}
+    entries = []
+    for entry in titles.get("titles") or []:
+        entry = dict(entry)
+        if entry.get("outcome") != "deleted":
+            entry["outcome"] = ("ripped" if entry["tid"] in written else "missing") if entry.get("rip") else "skipped"
+        entries.append(entry)
+    titles["titles"] = entries
+    if titles.get("ambiguous_language") and len(version_files({"titles": titles, "files": files})) < 2:
+        titles["ambiguous_language"] = False
+    return titles
+
+
+def record_outcomes(job, files):
+    data = store.load_job(job.job_id)
+    if not data.get("titles"):
+        return
+    was_ambiguous = data["titles"].get("ambiguous_language")
+    titles = with_outcomes(data["titles"], files)
+    missing = [str(t["tid"]) for t in titles["titles"] if t["outcome"] == "missing"]
+    if missing:
+        logging.warning(f"Planned title(s) {', '.join(missing)} made no file (MakeMKV didn't write them)")
+    if was_ambiguous and not titles["ambiguous_language"]:
+        store.clear_attention(job.job_id, "language")
+    store.update_job(job.job_id, titles=titles)
+
+
+def version_files(data):
+    """
+    The finished files to choose between when a disc has language versions ARM couldn't tell
+    apart: [(index in data["files"], entry)], or [] when there's no choice to make.
+    """
+    titles = data.get("titles") or {}
+    if not titles.get("ambiguous_language"):
+        return []
+    candidates = {t["tid"] for t in titles.get("titles") or [] if t["role"] == "main" or t.get("ambiguous")}
+    return [(index, entry) for index, entry in enumerate(data.get("files") or [])
+            if entry.get("tid") in candidates and entry.get("role") in VERSION_ROLES]
+
+
+def _inside_completed(path):
+    completed = os.path.realpath(str(cfg.arm_config["COMPLETED_PATH"]))
+    return os.path.realpath(path).startswith(completed + os.sep)
+
+
+def keep_version(job, index):
+    """
+    The user picked one of the language versions: delete the others and give the kept one
+    the main file name (Movie (Year).mkv).
+    :return: (kept path, [deleted paths]); raises ValueError when it can't be done
+    """
+    data = store.load_job(job.job_id)
+    choices = dict(version_files(data))
+    if index not in choices:
+        raise ValueError("That file isn't one of the versions to choose from.")
+    chosen = choices[index]
+    if not _inside_completed(chosen["file"]) or not os.path.isfile(chosen["file"]):
+        raise ValueError(f"{os.path.basename(chosen['file'])} isn't there any more.")
+    main = next((entry for entry in choices.values() if entry["role"] == "main"), None)
+    deleted = []
+    for other_index, entry in choices.items():
+        if other_index != index and _inside_completed(entry["file"]) and os.path.isfile(entry["file"]):
+            os.remove(entry["file"])
+            deleted.append(entry["file"])
+    target = chosen["file"]
+    if main is not None and main is not chosen and not os.path.exists(main["file"]):
+        target = main["file"]
+        os.rename(chosen["file"], target)
+    logging.info(f"Job {job.job_id}: kept {target} (title {chosen['tid']}), deleted {len(deleted)} other version(s)")
+    files = []
+    for file_index, entry in enumerate(data.get("files") or []):
+        if file_index == index:
+            files.append(dict(entry, file=target, role="main"))
+        elif file_index not in choices:
+            files.append(entry)
+    dropped = {entry["tid"] for i, entry in choices.items() if i != index}
+    titles = dict(data["titles"], ambiguous_language=False, kept_tid=chosen["tid"])
+    titles["titles"] = [dict(t, outcome="deleted") if t["tid"] in dropped else t for t in titles["titles"]]
+    store.update_job(job.job_id, files=files, titles=titles)
+    store.clear_attention(job.job_id, "language")
+    from arm.automation import jellyfin
+    jellyfin.announce(job, os.path.dirname(target))
+    return target, deleted
+
+
+def keep_all_versions(job):
+    """The user wants every language version: stop asking"""
+    data = store.load_job(job.job_id)
+    if data.get("titles"):
+        store.update_job(job.job_id, titles=dict(data["titles"], ambiguous_language=False, kept_tid="all"))
+    store.clear_attention(job.job_id, "language")
 
 
 def verify_main_file(job, final_dir):

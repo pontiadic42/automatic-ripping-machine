@@ -202,6 +202,60 @@ class TestJobCard(Temp):
         self.assertIn("2:15:00", html)
         self.assertIn("Not sure this is It", html)
 
+    def render(self, job_id=3):
+        job = SimpleNamespace(job_id=job_id, status="success", title="Arrietty", title_manual=None, path=None)
+        data = jobs_routes._automation_view(job)
+        with app.test_request_context(f"/jobdetail?job_id={job_id}"):
+            return data, app.jinja_env.get_template("automation_card.html").render(automation=data, jobs=job)
+
+    def versions_plan(self):
+        return {"ambiguous_language": True, "titles": [
+            {"tid": 0, "seconds": 5680, "role": "main", "rip": True, "label": "", "reason": "Closest",
+             "language": "eng", "audio": ["eng", "fre"], "subtitles": ["eng"]},
+            {"tid": 1, "seconds": 5680, "role": "language", "rip": True, "label": "Version 2", "ambiguous": True,
+             "reason": "Same cut, but ARM can't tell", "language": "eng", "audio": ["eng", "fre"]}]}
+
+    def test_missing_title_is_shown_and_there_is_no_picker(self):
+        store.update_job(3, titles=self.versions_plan(),
+                         files=[{"tid": 0, "role": "main", "file": "/x/Arrietty (2010).mkv"}],
+                         attention=[{"kind": "language", "message": "Several versions", "level": "warn"}])
+        data, html = self.render()
+        self.assertEqual(data["versions"], [])
+        self.assertIn("No file made", html)
+        self.assertNotIn("Keep this one", html)
+        self.assertNotIn("Several versions", html)
+
+    def test_picker_shows_each_version(self):
+        folder = os.path.join(self.tmp, "Arrietty (2010)")
+        os.makedirs(folder)
+        files = []
+        for tid, name in ((0, "Arrietty (2010).mkv"), (1, "Arrietty (2010) - Version 2.mkv")):
+            with open(os.path.join(folder, name), "wb") as handle:
+                handle.write(b"x" * 2_000_000)
+            files.append({"tid": tid, "role": "main" if tid == 0 else "language", "file": os.path.join(folder, name)})
+        store.update_job(3, titles=self.versions_plan(), files=files)
+        data, html = self.render()
+        self.assertEqual(len(data["versions"]), 2)
+        self.assertEqual(html.count("Keep this one"), 2)
+        self.assertEqual(html.count("/automation/frame?job=3&file=1&at="), 3)  # three stills per file
+        self.assertIn("1:34:40 · 2 MB", html)
+        self.assertIn("subtitles eng", html)
+        self.assertIn("Keep all of them", html)
+
+    def test_keep_version_route(self):
+        job = SimpleNamespace(job_id=3, finished=True, title="Arrietty", title_manual=None, label="")
+        query = MagicMock()
+        query.get.return_value = job
+        with patch.object(routes.Job, "query", query), patch.dict(app.config, {"LOGIN_DISABLED": True}), \
+                patch("arm.automation.organize.keep_version", return_value=("/c/A (2010).mkv", ["/c/B.mkv"])) as keep:
+            reply = self.client.post("/automation/job_action", data={"job": 3, "action": "keep_version", "file": 1})
+        self.assertEqual(reply.get_json()["message"], "Kept A (2010).mkv and deleted 1 other version.")
+        keep.assert_called_once_with(job, 1)
+        job.finished = False
+        with patch.object(routes.Job, "query", query), patch.dict(app.config, {"LOGIN_DISABLED": True}):
+            reply = self.client.post("/automation/job_action", data={"job": 3, "action": "keep_version", "file": 1})
+        self.assertEqual(reply.status_code, 400)
+
 
 class TestRetitleRoute(Temp):
 

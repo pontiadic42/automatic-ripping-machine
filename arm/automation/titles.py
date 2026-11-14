@@ -161,7 +161,8 @@ def _decision(title, role, rip, label="", reason="", **extra):
     entry = {"tid": title.tid, "seconds": title.seconds, "minutes": round(title.seconds / 60, 1), "role": role,
              "rip": bool(rip), "label": label, "reason": reason, "language": title.language,
              "source": title.source, "segments": len(title.segments),
-             "audio": [s["lang"] + (" (commentary)" if s["commentary"] else "") for s in title.audio if s["lang"]]}
+             "audio": [s["lang"] + (" (commentary)" if s["commentary"] else "") for s in title.audio if s["lang"]],
+             "subtitles": [s["lang"] + (" (forced)" if s.get("forced") else "") for s in title.subtitles if s["lang"]]}
     entry.update(extra)
     return entry
 
@@ -346,7 +347,7 @@ def plan(job, raw):
     if ambiguous:
         store.add_attention(job.job_id, "language",
                             "This disc has the movie in several language versions ARM couldn't tell apart. "
-                            "All of them were kept; check the still frames on the job page.")
+                            "All of them were kept; pick the one to keep on the job page.")
     return {d["tid"]: d for d in result["titles"]}
 
 

@@ -84,6 +84,79 @@ class TestOrganizeMovie(Temp):
             self.assertIsNone(organize.check_length("/x/a.mkv", 100))
 
 
+class TestLanguageVersions(Temp):
+    """Language versions ARM couldn't tell apart: what was really ripped, and keeping one"""
+
+    final = None
+
+    def plan(self):
+        titles = {"ambiguous_language": True, "titles": [
+            dict(decision(0, "main", 5680), audio=["eng", "fre"], language="eng"),
+            dict(decision(1, "language", 5680, "Version 2"), ambiguous=True, audio=["eng", "fre"], language="eng")]}
+        store.update_job(9, titles=titles)
+        store.add_attention(9, "language", "Several language versions")
+        return {t["tid"]: t for t in titles["titles"]}
+
+    def rip(self, *names):
+        for name in names:
+            path = self.touch("out", name)
+            with open(path, "w") as handle:
+                handle.write(name)
+        self.final = os.path.join(self.completed, "movies", "Arrietty (2010)")
+        job = movie_job(title="Arrietty", year="2010")
+        with patch.object(organize, "duration_seconds", return_value=5680):
+            organize.organize(job, os.path.join(self.tmp, "out"), self.final, self.plan())
+        return job
+
+    def test_title_makemkv_did_not_write_is_marked_missing(self):
+        self.rip("B1_t00.mkv")
+        data = store.load_job(9)
+        outcomes = {t["tid"]: t["outcome"] for t in data["titles"]["titles"]}
+        self.assertEqual(outcomes, {0: "ripped", 1: "missing"})
+        self.assertFalse(data["titles"]["ambiguous_language"])  # nothing to choose between
+        self.assertEqual(data.get("attention"), [])
+        self.assertEqual(organize.version_files(data), [])
+
+    def test_keep_the_second_version(self):
+        job = self.rip("B1_t00.mkv", "B1_t01.mkv")
+        data = store.load_job(9)
+        self.assertTrue(data["titles"]["ambiguous_language"])
+        choices = organize.version_files(data)
+        self.assertEqual([entry["tid"] for _i, entry in choices], [0, 1])
+        second = next(i for i, entry in choices if entry["tid"] == 1)
+        with patch.dict(cfg.arm_config, {"JELLYFIN_URL": ""}):
+            kept, deleted = organize.keep_version(job, second)
+        self.assertEqual(os.listdir(self.final), ["Arrietty (2010).mkv"])
+        self.assertEqual(kept, os.path.join(self.final, "Arrietty (2010).mkv"))
+        with open(kept) as handle:
+            self.assertEqual(handle.read(), "B1_t01.mkv")  # the version picked, under the main name
+        self.assertEqual(len(deleted), 1)
+        data = store.load_job(9)
+        self.assertEqual(data["files"], [{"tid": 1, "role": "main", "file": kept}])
+        self.assertEqual({t["tid"]: t["outcome"] for t in data["titles"]["titles"]}, {0: "deleted", 1: "ripped"})
+        self.assertFalse(data["titles"]["ambiguous_language"])
+        self.assertEqual(data["titles"]["kept_tid"], 1)
+        self.assertEqual(data.get("attention"), [])
+
+    def test_keep_the_main_version(self):
+        job = self.rip("B1_t00.mkv", "B1_t01.mkv")
+        main = next(i for i, entry in organize.version_files(store.load_job(9)) if entry["tid"] == 0)
+        with patch.dict(cfg.arm_config, {"JELLYFIN_URL": ""}):
+            organize.keep_version(job, main)
+        self.assertEqual(os.listdir(self.final), ["Arrietty (2010).mkv"])
+        with open(os.path.join(self.final, "Arrietty (2010).mkv")) as handle:
+            self.assertEqual(handle.read(), "B1_t00.mkv")
+
+    def test_bad_choices_are_refused(self):
+        job = self.rip("B1_t00.mkv", "B1_t01.mkv")
+        with self.assertRaises(ValueError):
+            organize.keep_version(job, 7)
+        organize.keep_all_versions(job)
+        self.assertEqual(sorted(os.listdir(self.final)), ["Arrietty (2010) - Version 2.mkv", "Arrietty (2010).mkv"])
+        with self.assertRaises(ValueError):  # already decided
+            organize.keep_version(job, 0)
+
+
 class TestEpisodes(Temp):
 
     def season_data(self, count=10, runtime=44):

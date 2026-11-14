@@ -27,12 +27,18 @@
             if (action === "cancel" && !confirm("Stop this job and eject the disc?")) { return; }
             if (action === "delete_files" &&
                 !confirm("Permanently delete the files ARM ripped for this job? This can't be undone.")) { return; }
+            if (action === "keep_version") {
+                const others = Number(button.dataset.others || 1);
+                if (!confirm("Keep " + button.dataset.name + " and permanently delete the other " + others +
+                             " version" + (others === 1 ? "" : "s") + "? This can't be undone.")) { return; }
+            }
             const token = document.querySelector('meta[name="csrf-token"]');
             button.disabled = true;
             fetch("/automation/job_action", {
                 method: "POST", credentials: "same-origin",
                 headers: token ? {"X-CSRFToken": token.content} : {},
-                body: new URLSearchParams({job: "{{ jobs.job_id }}", action: action, kind: button.dataset.kind || ""})
+                body: new URLSearchParams({job: "{{ jobs.job_id }}", action: action, kind: button.dataset.kind || "",
+                                           file: button.dataset.file || ""})
             }).then(function (r) { return r.json(); }).then(function (data) {
                 if (!data.success) { alert(data.message || "Something went wrong"); }
                 window.location.reload();
@@ -91,8 +97,16 @@
                         {% if t.label %}<span class="arm-muted"> {{ t.label }}</span>{% endif %}
                     </td>
                     <td>{{ t.language or "" }}{% if t.audio %}<span class="arm-faint"> · audio {{ t.audio | join(", ") }}</span>{% endif %}</td>
-                    <td>{{ "Yes" if t.rip else "No" }}</td>
-                    <td class="arm-muted">{{ t.reason }}</td>
+                    <td>
+                        {% if t.outcome == "missing" %}<span class="arm-pill bad">No file made</span>
+                        {% elif t.outcome == "deleted" %}<span class="arm-pill">Deleted</span>
+                        {% else %}{{ "Yes" if t.rip else "No" }}{% endif %}
+                    </td>
+                    <td class="arm-muted">{{ t.reason }}
+                        {% if t.outcome == "missing" %}<br>Planned, but MakeMKV didn't write a file for it (it often
+                            leaves out titles it treats as copies of another title).
+                        {% elif t.outcome == "deleted" %}<br>You kept title {{ automation.titles.kept_tid }} instead.{% endif %}
+                    </td>
                 </tr>
             {% endfor %}
             </tbody>
@@ -101,19 +115,36 @@
         {% if automation.episodes %}<p class="arm-muted" style="font-size:13px">Episodes: {{ automation.episodes }}</p>{% endif %}
     {% endif %}
 
-    {% if automation.frames %}
-        <h3 class="arm-auto-h">Which version is which?</h3>
-        <p class="arm-muted" style="font-size:13px">Stills from the start of each version. Title cards and on-screen text
-            usually show the language.</p>
-        <div class="arm-auto-frames">
-            {% for f in automation.frames %}
-                <figure>
-                    <img loading="lazy" alt="Still from {{ f.label }}"
-                         src="/automation/frame?job={{ jobs.job_id }}&file={{ f.index }}&at=90">
-                    <figcaption>{{ f.label }}</figcaption>
-                </figure>
-            {% endfor %}
-        </div>
+    {% if automation.versions %}
+        <h3 class="arm-auto-h">Which version do you want to keep?</h3>
+        <p class="arm-muted" style="font-size:13px">ARM found {{ automation.versions | length }} versions of the movie
+            it couldn't tell apart. Title cards and on-screen text in the stills usually show the language.
+            Keeping one deletes the others and gives it the main file name.</p>
+        {% for v in automation.versions %}
+            <div class="arm-auto-version">
+                <div class="arm-auto-version-head">
+                    <span><b>{{ v.label or ("Title " ~ v.tid) }}</b>
+                        <span class="arm-muted"> · title {{ v.tid }} · <code>{{ v.name }}</code></span></span>
+                    <button type="button" class="arm-btn" data-card-action="keep_version" data-file="{{ v.index }}"
+                            data-name="{{ v.name }}" data-others="{{ automation.versions | length - 1 }}">Keep this one</button>
+                </div>
+                <div class="arm-auto-frames">
+                    {% for s in v.stills %}
+                        <figure>
+                            <img loading="lazy" alt="Still from {{ v.name }} at {{ s.clock }}"
+                                 src="/automation/frame?job={{ jobs.job_id }}&file={{ v.index }}&at={{ s.at }}">
+                            <figcaption>{{ s.clock }}</figcaption>
+                        </figure>
+                    {% endfor %}
+                </div>
+                <p class="arm-muted arm-auto-version-facts">
+                    {% if v.length %}{{ v.length }}{% endif %}{% if v.size %} · {{ v.size }}{% endif %}
+                    {% if v.audio %} · audio {{ v.audio | join(", ") }}{% endif %}
+                    {% if v.subtitles %} · subtitles {{ v.subtitles | join(", ") }}{% endif %}
+                </p>
+            </div>
+        {% endfor %}
+        <p><button type="button" class="arm-btn" data-card-action="keep_all">Keep all of them</button></p>
     {% endif %}
 
     {% if automation.files %}

@@ -42,7 +42,7 @@ SCHEMA = (
             "gets things that need you, problems and the daily summary."),
     Setting("ARM_PHONE_URL", "", "str", "notify", "ARM address for your phone",
             "How your phone reaches this ARM, used for the buttons in notifications, "
-            "e.g. http://192.168.0.121:8080. Empty uses UI_BASE_URL."),
+            "e.g. http://192.168.1.50:8080. Empty uses UI_BASE_URL."),
 
     # Identification
     Setting("CONFIDENCE_ENABLED", True, "bool", "identify", "Score identification confidence",
@@ -115,7 +115,7 @@ SCHEMA = (
 
     # Jellyfin
     Setting("JELLYFIN_URL", "", "str", "jellyfin", "Jellyfin address",
-            "e.g. http://192.168.0.121:8096. Leave empty to turn this off."),
+            "e.g. http://192.168.1.50:8096. Leave empty to turn this off."),
     Setting("JELLYFIN_API_KEY", "", "secret", "jellyfin", "Jellyfin API key",
             "Create one in Jellyfin: Dashboard > API Keys."),
     Setting("JELLYFIN_MEDIA_ROOT", "/media", "str", "jellyfin", "Media folder in Jellyfin",

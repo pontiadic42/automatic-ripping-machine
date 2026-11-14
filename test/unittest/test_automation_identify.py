@@ -146,7 +146,7 @@ class TestNotify(TempStore):
 
     def test_send_posts_json_with_actions(self):
         with patch.dict(cfg.arm_config, {"NTFY_SERVER": "https://ntfy.example/", "NTFY_TOPIC": "arm",
-                                         "NTFY_TOKEN": "tk_secret", "ARM_PHONE_URL": "http://192.168.0.121:8080"}), \
+                                         "NTFY_TOKEN": "tk_secret", "ARM_PHONE_URL": "http://192.168.1.50:8080"}), \
                 patch.object(notify.requests, "post", return_value=MagicMock(status_code=200)) as post:
             ok = notify.send("Is this It?", "body", priority="high", tags=["dvd"],
                              actions=[notify.http("Yes", notify.action_url(5, "confirm"))])
@@ -156,7 +156,7 @@ class TestNotify(TempStore):
         self.assertEqual(url, "https://ntfy.example")
         self.assertEqual(payload["topic"], "arm")
         self.assertEqual(payload["priority"], 4)
-        self.assertTrue(payload["actions"][0]["url"].startswith("http://192.168.0.121:8080/automation/act?job=5"))
+        self.assertTrue(payload["actions"][0]["url"].startswith("http://192.168.1.50:8080/automation/act?job=5"))
         self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], "Bearer tk_secret")
 
     def test_send_is_off_without_server_and_never_raises(self):

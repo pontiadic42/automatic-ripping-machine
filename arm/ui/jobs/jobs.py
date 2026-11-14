@@ -14,6 +14,7 @@ Covers
 """
 
 import json
+import os
 from flask_login import LoginManager, login_required, current_user  # noqa: F401
 from flask import render_template, request, Blueprint, flash, redirect, url_for
 from werkzeug.routing import ValidationError
@@ -28,6 +29,45 @@ from arm.ui.forms import TitleSearchForm, ChangeParamsForm, TrackFormDynamic
 route_jobs = Blueprint('route_jobs', __name__,
                        template_folder='templates',
                        static_folder='../static')
+
+
+def _title_base(job):
+    """Folder/file name the job's current title gives (as the ripper names them)"""
+    from arm.automation import organize
+    from arm.ripper import utils as ripper_utils
+    try:
+        return organize.safe_name(ripper_utils.fix_job_title(job))
+    except AttributeError:
+        return None
+
+
+def _automation_view(job):
+    """Automation record for the job page: confidence, titles, files, checks"""
+    from arm.automation import store
+    data = store.load_job(job.job_id)
+    files = data.get("files") or []
+    data["frames"] = [{"index": i, "label": os.path.basename(f["file"]), "role": f["role"]}
+                      for i, f in enumerate(files) if f["role"] in ("main", "language")] \
+        if (data.get("titles") or {}).get("ambiguous_language") else []
+    return data
+
+
+def _retitle_finished(job, old_path, old_base):
+    """The title of a finished job changed: move and rename its files to match"""
+    if getattr(job, "status", None) != JobState.SUCCESS.value or not old_path or not old_base:
+        return
+    try:
+        from arm.automation import jellyfin, organize
+        new_dir = organize.retitle(job, old_path, old_base)
+    except Exception as error:  # noqa: BLE001
+        app.logger.exception(f"Couldn't move the files of job {job.job_id}")
+        flash(f"The title was saved, but the files couldn't be moved: {error}", "danger")
+        return
+    if new_dir:
+        job.path = new_dir
+        db.session.commit()
+        jellyfin.announce(job, new_dir, old_path)
+        flash(f"Moved the files to {new_dir}", "success")
 
 
 @route_jobs.route('/jobdetail')
@@ -77,7 +117,8 @@ def jobdetail():
                            tracks=tracks,
                            s=search_results,
                            manual_edit=manual_edit,
-                           form=track_form)
+                           form=track_form,
+                           automation=_automation_view(job))
 
 
 @route_jobs.route('/jobdetailload', methods=['POST'])
@@ -146,6 +187,7 @@ def customtitle():
     if request.args.get("title"):
         # Clean the title like updatetitle does: it becomes part of folder and file names
         new_title = ui_utils.clean_for_filename(request.args.get("title"))
+        old_path, old_base = getattr(job, "path", None), _title_base(job)
         args = {
             'title': new_title,
             'title_manual': new_title,
@@ -158,6 +200,7 @@ def customtitle():
         db.session.add(notification)
         ui_utils.database_updater(args, job)
         flash(f'Custom title changed. Title={job.title}, Year={job.year}.', "success")
+        _retitle_finished(job, old_path, old_base)
         return redirect(url_for('home'))
     return render_template('customTitle.html', title='Change Title', form=form, job=job)
 
@@ -209,6 +252,7 @@ def updatetitle():
     job = Job.query.get(job_id)
     old_title = job.title
     old_year = job.year
+    old_path, old_base = getattr(job, "path", None), _title_base(job)
     app.logger.debug(f"Old Title and Year: {old_title}, {old_year}")
 
     app.logger.debug(f"New Title: {request.args.get('title')}")
@@ -234,6 +278,7 @@ def updatetitle():
     db.session.commit()
     flash(f'Title: {old_title} ({old_year}) was updated to '
           f'{request.args.get("title")} ({request.args.get("year")})', "success")
+    _retitle_finished(job, old_path, old_base)
     return redirect("/")
 
 

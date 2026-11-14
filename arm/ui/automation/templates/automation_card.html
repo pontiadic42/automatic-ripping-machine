@@ -1,0 +1,93 @@
+{% if automation %}
+<div class="arm-auto-card">
+    {% for item in automation.attention or [] %}
+        <div class="arm-attn {{ 'bad' if item.level == 'bad' }}">{{ item.message }}</div>
+    {% endfor %}
+
+    {% if automation.confidence %}
+        {% set c = automation.confidence %}
+        <div class="arm-auto-conf">
+            <div class="arm-auto-score arm-auto-{{ c.level or 'medium' }}">
+                <b>{{ c.score }}</b><span>/100</span>
+            </div>
+            <div>
+                <p class="arm-auto-conf-title">
+                    {% if c.confirmed %}Title confirmed by you
+                    {% elif c.level == "high" %}ARM is sure about this title
+                    {% elif c.level == "low" %}ARM isn't sure about this title
+                    {% else %}ARM is fairly sure about this title{% endif %}
+                </p>
+                <ul class="arm-auto-reasons">
+                    {% for reason in c.reasons %}<li>{{ reason }}</li>{% endfor %}
+                </ul>
+                {% if c.main_minutes or c.tmdb_runtime %}
+                    <p class="arm-faint" style="font-size:12px; margin:0">
+                        {% if c.main_minutes %}Main title {{ c.main_minutes }} min{% endif %}
+                        {% if c.tmdb_runtime %} · TMDb runtime {{ c.tmdb_runtime }} min{% endif %}
+                    </p>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+
+    {% if automation.already_ripped %}
+        <p class="arm-muted" style="font-size:13px">
+            Same disc as <a href="/jobdetail?job_id={{ automation.already_ripped.job_id }}">job {{ automation.already_ripped.job_id }}</a>
+            ({{ automation.already_ripped.title }}).
+        </p>
+    {% endif %}
+
+    {% if automation.titles and automation.titles.titles %}
+        <h3 class="arm-auto-h">Titles on the disc</h3>
+        <div style="overflow-x:auto">
+        <table class="table arm-auto-titles" aria-label="Titles on the disc">
+            <thead><tr><th>#</th><th>Length</th><th>What it is</th><th>Language</th><th>Ripped</th><th>Why</th></tr></thead>
+            <tbody>
+            {% for t in automation.titles.titles if t.role != "short" %}
+                <tr class="{{ '' if t.rip else 'arm-auto-skipped' }}">
+                    <td>{{ t.tid }}</td>
+                    <td>{{ (t.seconds // 3600) }}:{{ '%02d' % ((t.seconds % 3600) // 60) }}:{{ '%02d' % (t.seconds % 60) }}</td>
+                    <td>
+                        <span class="arm-pill {{ 'now' if t.role == 'main' else ('warn' if t.ambiguous else '') }}">
+                            {{ {"main": "Main feature", "cut": "Other cut", "language": "Language version",
+                                "feature": "Other feature", "extra": "Extra", "duplicate": "Duplicate",
+                                "playall": "Play all", "episode": "Episode"}[t.role] }}</span>
+                        {% if t.label %}<span class="arm-muted"> {{ t.label }}</span>{% endif %}
+                    </td>
+                    <td>{{ t.language or "" }}{% if t.audio %}<span class="arm-faint"> · audio {{ t.audio | join(", ") }}</span>{% endif %}</td>
+                    <td>{{ "Yes" if t.rip else "No" }}</td>
+                    <td class="arm-muted">{{ t.reason }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% if automation.episodes %}<p class="arm-muted" style="font-size:13px">Episodes: {{ automation.episodes }}</p>{% endif %}
+    {% endif %}
+
+    {% if automation.frames %}
+        <h3 class="arm-auto-h">Which version is which?</h3>
+        <p class="arm-muted" style="font-size:13px">Stills from the start of each version. Title cards and on-screen text
+            usually show the language.</p>
+        <div class="arm-auto-frames">
+            {% for f in automation.frames %}
+                <figure>
+                    <img loading="lazy" alt="Still from {{ f.label }}"
+                         src="/automation/frame?job={{ jobs.job_id }}&file={{ f.index }}&at=90">
+                    <figcaption>{{ f.label }}</figcaption>
+                </figure>
+            {% endfor %}
+        </div>
+    {% endif %}
+
+    {% if automation.files %}
+        <h3 class="arm-auto-h">Files</h3>
+        <ul class="arm-auto-files">
+            {% for f in automation.files %}<li><code>{{ f.file }}</code></li>{% endfor %}
+        </ul>
+    {% endif %}
+    {% if automation.jellyfin %}
+        <p class="arm-muted" style="font-size:13px">Jellyfin: {{ automation.jellyfin.status }}{% if automation.jellyfin.item %} ({{ automation.jellyfin.item }}){% endif %}</p>
+    {% endif %}
+</div>
+{% endif %}

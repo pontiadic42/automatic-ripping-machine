@@ -30,6 +30,7 @@ from arm.models.system_drives import CDS, SystemDrives  # noqa: E402
 from arm.ripper import (arm_ripper, identify, logger,  # noqa: E402
                         music_brainz, utils)
 from arm.ripper.ARMInfo import ARMInfo  # noqa E402
+from arm.automation import hooks as automation_hooks  # noqa E402
 from arm.ui import app, constants, db  # noqa E402
 from arm.ui.settings import DriveUtils as drive_utils  # noqa E402
 
@@ -117,10 +118,13 @@ def main():
     logging.debug(f"Value of have_dupes: {have_dupes}")
     # Values set in the UI during identification win over the automatic ones
     utils.apply_manual_overrides(job)
+    # Confidence score (may ask on the phone), already-ripped check, disk space
+    confidence = automation_hooks.after_identify(job)
 
     utils.notify_entry(job)
-    # Check if user has manual wait time enabled
-    utils.check_for_wait(job)
+    # Manual wait: skipped when the title is certain, longer when it isn't
+    wait_seconds, force_wait = automation_hooks.wait_for_user(job, confidence)
+    utils.check_for_wait(job, wait_seconds, force_wait)
 
     log_arm_params(job)
     check_fstab()
@@ -254,6 +258,12 @@ def run():
         # Opening or ejecting the tray starts ARM too. Not a failure, so no
         # "fatal error" notification.
         logging.info(error)
+    except automation_hooks.JobSkipped as error:
+        # Skipped on purpose (already ripped); the user was told already
+        logging.info(f"Job skipped: {error}")
+        if job:
+            job.status = JobState.FAILURE.value
+            job.errors = f"Skipped: {error}"
     except Exception as error:
         logging.critical("A fatal error has occurred and ARM is exiting.")
         print_stacktrace = (

@@ -17,7 +17,8 @@ def arm_yaml_check_groups(comments, key):
                       'EMBY_REFRESH': "\n" + comments['ARM_CFG_GROUPS']['EMBY']
                                       + "\n" + comments['ARM_CFG_GROUPS']['EMBY_ADDITIONAL'],
                       'NOTIFY_RIP': "\n" + comments['ARM_CFG_GROUPS']['NOTIFY_PERMS'],
-                      'APPRISE': "\n" + comments['ARM_CFG_GROUPS']['APPRISE']}
+                      'APPRISE': "\n" + comments['ARM_CFG_GROUPS']['APPRISE'],
+                      'NTFY_SERVER': "\n\n" + comments['ARM_CFG_GROUPS'].get('AUTOMATION', '')}
     if key in comment_groups:
         arm_cfg = comment_groups[key]
     else:

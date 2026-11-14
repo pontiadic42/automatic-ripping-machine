@@ -188,7 +188,8 @@
             <a href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">${posterHtml(job.poster_url, jobTitle(job), "w185")}</a>
             <div class="arm-bay-body">
                 <p class="arm-bay-drive">${esc(driveName(drive))}${type ? " · " + esc(type) : ""}</p>
-                <p class="arm-bay-title"><a href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">${esc(jobTitle(job))}</a></p>
+                <p class="arm-bay-title"><a href="/jobdetail?job_id=${encodeURIComponent(job.job_id)}">${esc(jobTitle(job))}</a>
+                    ${confidencePill(job.job_id)}</p>
                 <div class="arm-steps">${stepsHtml(job)}</div>
                 ${showBar ? `<div class="arm-bar"><i style="width:${pct.toFixed(1)}%"></i></div>` : ""}
                 ${meta ? `<p class="arm-bay-meta">${esc(meta)}</p>` : ""}
@@ -210,9 +211,36 @@
         </div>`;
     }
 
+    function automationFor(jobId) {
+        return dashboard && dashboard.automation && dashboard.automation.jobs ?
+            dashboard.automation.jobs[String(jobId)] : null;
+    }
+
+    function confidencePill(jobId) {
+        const info = automationFor(jobId);
+        if (!info || info.confidence === null || info.confidence === undefined) {
+            return "";
+        }
+        const cls = info.level === "high" ? "done" : (info.level === "low" ? "warn" : "");
+        return `<span class="arm-pill ${cls}" title="How sure ARM is about the title">${Math.round(info.confidence)}% sure</span>`;
+    }
+
     function attentionHtml(activeJobs, recent) {
         let html = "";
-        activeJobs.filter(function (job) { return job.status === "waiting"; }).forEach(function (job) {
+        const shown = {};
+        // Items recorded by automation: low confidence, files cut short, stuck jobs, Jellyfin mismatches, ...
+        const auto = dashboard && dashboard.automation ? dashboard.automation.jobs || {} : {};
+        Object.keys(auto).forEach(function (jobId) {
+            (auto[jobId].attention || []).forEach(function (item) {
+                shown[jobId] = true;
+                html += `<div class="arm-attn ${item.level === "bad" ? "bad" : ""}">
+                    <span><b>${esc(auto[jobId].title || "Job " + jobId)}:</b> ${esc(item.message)}</span>
+                    <span class="arm-attn-actions"><a href="/jobdetail?job_id=${encodeURIComponent(jobId)}">Open</a>
+                    ${item.kind === "confidence" ? `<a href="titlesearch?job_id=${encodeURIComponent(jobId)}">Pick another</a>` : ""}
+                    </span></div>`;
+            });
+        });
+        activeJobs.filter(function (job) { return job.status === "waiting" && !shown[job.job_id]; }).forEach(function (job) {
             const id = encodeURIComponent(job.job_id);
             html += `<div class="arm-attn">
                 <span>${esc(jobTitle(job))} couldn't be identified. ARM will rip it as-is unless you set a title.</span>
@@ -221,7 +249,8 @@
         });
         const dayAgo = Date.now() - 24 * 3600 * 1000;
         (recent || []).filter(function (job) {
-            return job.status === "fail" && job.stop_time && Date.parse(job.stop_time) > dayAgo;
+            return job.status === "fail" && job.stop_time && Date.parse(job.stop_time) > dayAgo &&
+                !String(job.errors || "").startsWith("Skipped") && !shown[job.job_id];
         }).forEach(function (job) {
             html += `<div class="arm-attn bad">
                 <span>${esc(jobTitle(job))} failed${blank(job.errors) ? "" : ": " + esc(String(job.errors).slice(0, 140))}</span>
@@ -255,7 +284,9 @@
         return recent.map(function (job) {
             const when = timeAgo(job.stop_time);
             let sub = `<p class="arm-tile-sub">${esc(when)}</p>`;
-            if (job.status === "fail") {
+            if (job.status === "fail" && String(job.errors || "").startsWith("Skipped")) {
+                sub = `<p class="arm-tile-sub">Already ripped, skipped${when ? " · " + esc(when) : ""}</p>`;
+            } else if (job.status === "fail") {
                 sub = `<p class="arm-tile-sub bad">Failed${when ? " · " + esc(when) : ""}</p>`;
             } else if (!job.identified) {
                 sub = `<p class="arm-tile-sub warn">Unidentified${when ? " · " + esc(when) : ""}</p>`;

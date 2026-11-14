@@ -368,3 +368,238 @@ JSON_URL: ""
 # File location of your apprise.yaml file
 # Leave blank to disable
 APPRISE: ""
+
+
+#################################################
+##                 AUTOMATION                  ##
+#################################################
+# Also on the web UI: Settings > Automation
+
+# NTFY_SERVER
+# ntfy server.
+# Address of your ntfy server, e.g. https://ntfy.example.com. Leave empty to turn phone notifications
+# off.
+NTFY_SERVER: ""
+
+# NTFY_TOPIC
+# ntfy topic.
+# Topic your phone is subscribed to.
+NTFY_TOPIC: ""
+
+# NTFY_TOKEN
+# ntfy access token.
+# Only needed if your ntfy server requires a login (tk_...).
+NTFY_TOKEN: ""
+
+# NTFY_SEND_ALL
+# Send every ARM notification.
+# Also send ARM's normal messages (disc found, rip complete, ...) to ntfy. When off, ntfy only gets
+# things that need you, problems and the daily summary.
+NTFY_SEND_ALL: false
+
+# ARM_PHONE_URL
+# ARM address for your phone.
+# How your phone reaches this ARM, used for the buttons in notifications, e.g.
+# http://192.168.0.121:8080. Empty uses UI_BASE_URL.
+ARM_PHONE_URL: ""
+
+# CONFIDENCE_ENABLED
+# Score identification confidence.
+# Rate how sure ARM is about each disc's title (0-100) from the label, the TMDb runtime and earlier
+# rips of the same disc.
+CONFIDENCE_ENABLED: true
+
+# CONFIDENCE_NOTIFY_BELOW
+# Ask me below.
+# Below this score ARM sends a notification with Confirm / Pick another buttons and waits for you.
+CONFIDENCE_NOTIFY_BELOW: 70
+
+# CONFIDENCE_SKIP_WAIT_ABOVE
+# Don't wait above.
+# At or above this score ARM skips the manual-wait period and starts ripping right away. 0 = always
+# wait as usual.
+CONFIDENCE_SKIP_WAIT_ABOVE: 90
+
+# LOW_CONFIDENCE_WAIT_TIME
+# Wait for low confidence (seconds).
+# How long to wait for you when the score is low. After that ARM rips with its best guess. 0 = use
+# MANUAL_WAIT_TIME.
+LOW_CONFIDENCE_WAIT_TIME: 900
+
+# RUNTIME_MATCHING
+# Use the runtime to identify.
+# When the label is vague, search TMDb and pick the result whose runtime matches the main title.
+RUNTIME_MATCHING: true
+
+# ALREADY_RIPPED_ACTION
+# Disc already ripped.
+# What to do when the same disc was ripped before and its files still exist: rip = rip again, notify =
+# rip and tell you, skip = eject without ripping.
+# One of: rip, notify, skip
+ALREADY_RIPPED_ACTION: "notify"
+
+# MIN_FREE_GB_DVD
+# Free space needed for a DVD (GB).
+# Free space ARM needs in the raw, transcode and completed folders before ripping a DVD.
+MIN_FREE_GB_DVD: 20
+
+# MIN_FREE_GB_BLURAY
+# Free space needed for a Blu-ray (GB).
+# Same for Blu-rays.
+MIN_FREE_GB_BLURAY: 80
+
+# DISK_SPACE_ACTION
+# When space is short.
+# wait = notify and check every 5 minutes for up to 2 hours, fail = stop the job, ignore = rip anyway.
+# One of: wait, fail, ignore
+DISK_SPACE_ACTION: "wait"
+
+# TITLE_ANALYSIS
+# Analyse the disc's titles.
+# Work out which titles are the main feature, other cuts, language versions, duplicates, extras or TV
+# episodes, rip only what's needed and name the files accordingly.
+TITLE_ANALYSIS: true
+
+# PREFERRED_LANGUAGE
+# Preferred language.
+# ISO 639-2 code (eng, fra, deu, spa, ...). Picks the main version when a disc has the movie in
+# several languages.
+PREFERRED_LANGUAGE: "eng"
+
+# KEEP_ALTERNATE_CUTS
+# Keep other cuts.
+# Also rip theatrical / extended / director's cuts. They're saved next to the movie as versions
+# Jellyfin can switch between.
+KEEP_ALTERNATE_CUTS: true
+
+# KEEP_OTHER_LANGUAGE_VERSIONS
+# Keep other language versions.
+# Also rip the movie's versions in other languages. When ARM can't tell which version is yours, it
+# keeps them all and asks.
+KEEP_OTHER_LANGUAGE_VERSIONS: false
+
+# SKIP_DUPLICATE_TITLES
+# Skip duplicate titles.
+# Don't rip titles that are exact copies of another title (common on protected discs) or "play all"
+# titles on TV discs.
+SKIP_DUPLICATE_TITLES: true
+
+# ORGANIZE_EXTRAS
+# Name extras.
+# Put extras in the extras folder with readable names instead of B1_t03.mkv.
+ORGANIZE_EXTRAS: true
+
+# TV_EPISODE_MATCHING
+# Match TV episodes.
+# Match titles to episodes using TMDb episode runtimes and name them Show S01E03.mkv.
+TV_EPISODE_MATCHING: true
+
+# VERIFY_OUTPUT
+# Check finished files.
+# Compare each finished file's length with the disc title before deleting the raw rip. If one is
+# short, the raw files are kept and you're told.
+VERIFY_OUTPUT: true
+
+# VERIFY_TOLERANCE_SECONDS
+# Allowed difference (seconds).
+# How much shorter a file may be than its title before it counts as cut off.
+VERIFY_TOLERANCE_SECONDS: 90
+
+# READ_ERROR_RETRIES
+# Retries after a MakeMKV failure.
+# Retry the rip this many times. If it still fails you get "clean the disc or try the other drive".
+READ_ERROR_RETRIES: 1
+
+# STUCK_JOB_MINUTES
+# Stuck after (minutes).
+# A rip or transcode with no progress for this long counts as stuck. 0 = off.
+STUCK_JOB_MINUTES: 30
+
+# STUCK_JOB_ACTION
+# When a job is stuck.
+# notify = tell you, abandon = stop it cleanly, eject and tell you.
+# One of: notify, abandon
+STUCK_JOB_ACTION: "abandon"
+
+# TRIM_TRACKS
+# Keep only my languages.
+# Only keep audio and subtitle tracks in the languages below (plus commentary and forced subtitles)
+# when transcoding with HandBrake.
+TRIM_TRACKS: false
+
+# KEEP_AUDIO_LANGUAGES
+# Audio languages.
+# Comma-separated ISO 639-2 codes, e.g. eng,fra.
+KEEP_AUDIO_LANGUAGES: "eng"
+
+# KEEP_SUBTITLE_LANGUAGES
+# Subtitle languages.
+# Comma-separated ISO 639-2 codes.
+KEEP_SUBTITLE_LANGUAGES: "eng"
+
+# JELLYFIN_URL
+# Jellyfin address.
+# e.g. http://192.168.0.121:8096. Leave empty to turn this off.
+JELLYFIN_URL: ""
+
+# JELLYFIN_API_KEY
+# Jellyfin API key.
+# Create one in Jellyfin: Dashboard > API Keys.
+JELLYFIN_API_KEY: ""
+
+# JELLYFIN_MEDIA_ROOT
+# Media folder in Jellyfin.
+# Where Jellyfin sees your NAS media share.
+JELLYFIN_MEDIA_ROOT: "/media"
+
+# JELLYFIN_FOLDER_MAP
+# Folder names.
+# ARM folder = folder under the media share, separated by semicolons.
+JELLYFIN_FOLDER_MAP: "movies=Movies;tv=TV Shows;unidentified=unidentified;music=Music"
+
+# JELLYFIN_VERIFY_MATCH
+# Check Jellyfin's match.
+# After the scan, check Jellyfin matched the same movie or show ARM ripped.
+JELLYFIN_VERIFY_MATCH: true
+
+# DB_BACKUP_ENABLED
+# Back up the database daily.
+DB_BACKUP_ENABLED: true
+
+# DB_BACKUP_TIME
+# Backup time.
+# 24-hour time, HH:MM.
+DB_BACKUP_TIME: "03:00"
+
+# DB_BACKUP_KEEP
+# Backups to keep.
+DB_BACKUP_KEEP: 14
+
+# DB_BACKUP_DIR
+# Backup folder.
+# Empty = a backups folder next to the database.
+DB_BACKUP_DIR: ""
+
+# CLEANUP_ENABLED
+# Clean up daily.
+# Remove leftover raw and transcode folders that no job is using.
+CLEANUP_ENABLED: true
+
+# CLEANUP_LEFTOVER_DAYS
+# Leftovers older than (days).
+CLEANUP_LEFTOVER_DAYS: 3
+
+# CLEANUP_FAILED_DUPLICATE_JOBS
+# Remove superseded failed jobs.
+# Delete failed jobs from the database once the same disc has been ripped successfully.
+CLEANUP_FAILED_DUPLICATE_JOBS: true
+
+# DAILY_SUMMARY_ENABLED
+# Daily summary.
+# One notification a day: what got ripped, what's unidentified and what failed.
+DAILY_SUMMARY_ENABLED: true
+
+# DAILY_SUMMARY_TIME
+# Summary time.
+# 24-hour time, HH:MM.
+DAILY_SUMMARY_TIME: "08:00"

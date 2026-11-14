@@ -4,6 +4,7 @@ It would help clear up main and make things easier to find
 import sys
 import os
 import logging
+import time
 from importlib.util import find_spec
 from pathlib import Path
 
@@ -15,6 +16,7 @@ if find_spec("arm") is None:
 from arm.ripper import utils, makemkv, handbrake, ffmpeg  # noqa E402
 from arm.ui import app, db, constants  # noqa E402
 from arm.models.job import JobState  # noqa E402
+from arm.automation import hooks as automation_hooks  # noqa E402
 
 
 def rip_visual_media(have_dupes, job, logfile, protection):
@@ -57,17 +59,7 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         # Run MakeMKV and get path to output
         job.status = JobState.VIDEO_RIPPING.value
         db.session.commit()
-        try:
-            makemkv_out_path = makemkv.makemkv(job)
-        except (makemkv.MakeMkvRuntimeError, makemkv.UpdateKeyRunTimeError, utils.RipperException) as mkv_error:
-            # Keep the reason: main.py only logs this exception's message (it
-            # prints the chained traceback at DEBUG level only), and it is
-            # what job.errors and the failure notification show.
-            raise utils.RipperException(f"Error while running MakeMKV: {mkv_error}") from mkv_error
-        except Exception as mkv_error:
-            logging.exception("Unexpected error while running MakeMKV")
-            raise utils.RipperException(
-                f"Error while running MakeMKV: {type(mkv_error).__name__}: {mkv_error}") from mkv_error
+        makemkv_out_path = rip_with_retries(job)
 
         if job.config.NOTIFY_RIP:
             utils.notify(job, constants.NOTIFY_TITLE, f"{job.title} rip complete. Starting transcode. ")
@@ -94,19 +86,64 @@ def rip_visual_media(have_dupes, job, logfile, protection):
         # Update the job.path with the final directory
         utils.database_updater({'path': final_directory}, job)
 
-    # Move to final folder
-    move_files_post(transcode_out_path, job)
+    # Move to final folder: named by title analysis when the titles were analysed, otherwise ARM's own way
+    organized, problems = automation_hooks.finish(job, transcode_out_path, final_directory)
+    if not organized:
+        move_files_post(transcode_out_path, job)
+        problems = automation_hooks.check_main(job, final_directory)
     # Movie the movie poster if we have one - no longer needed, now handled by save_movie_poster
     utils.move_movie_poster(final_directory, transcode_out_path)
     # Scan Emby if arm.yaml requires it
     utils.scan_emby()
     # Set permissions if arm.yaml requires it
     utils.set_permissions(final_directory)
-    # If set in the arm.yaml remove the raw files
-    utils.delete_raw_files([transcode_in_path, transcode_out_path, makemkv_out_path])
+    # Report files that look cut short, tell Jellyfin about the new folder
+    automation_hooks.after_move(job, final_directory, problems, [makemkv_out_path, transcode_in_path])
+    # If set in the arm.yaml remove the raw files - kept when a finished file looks cut short
+    if problems:
+        logging.warning("Keeping the raw files: " + "; ".join(problems))
+        utils.delete_raw_files([transcode_out_path])
+    else:
+        utils.delete_raw_files([transcode_in_path, transcode_out_path, makemkv_out_path])
     # report errors if any
     notify_exit(job)
     logging.info("************* ARM processing complete *************")
+
+
+def rip_with_retries(job):
+    """
+    Run MakeMKV, retrying READ_ERROR_RETRIES times when it fails (scratched or dirty discs
+    often read on a second pass). Licence/key problems aren't retried.
+    :return: path MakeMKV ripped to
+    """
+    from arm.automation import settings as automation_settings
+    from arm.models.track import Track
+    attempts = 1 + max(0, automation_settings.get("READ_ERROR_RETRIES"))
+    for attempt in range(1, attempts + 1):
+        try:
+            return makemkv.makemkv(job)
+        except makemkv.MakeMkvRuntimeError as mkv_error:
+            # MakeMKV itself failed (read errors and the like): worth another pass
+            if attempt < attempts:
+                logging.warning(f"MakeMKV failed (attempt {attempt} of {attempts}): {mkv_error}. Retrying in 30 s.")
+                # The next attempt lists the titles again
+                Track.query.filter_by(job_id=job.job_id).delete()
+                db.session.commit()
+                time.sleep(30)
+                continue
+            # Keep the reason: main.py only logs this exception's message (it
+            # prints the chained traceback at DEBUG level only), and it is
+            # what job.errors and the failure notification show.
+            hint = f" (tried {attempts} times; clean the disc or try it in the other drive)" if attempts > 1 else ""
+            raise utils.RipperException(f"Error while running MakeMKV: {mkv_error}{hint}") from mkv_error
+        except (makemkv.UpdateKeyRunTimeError, utils.RipperException) as mkv_error:
+            # Key problems, SIGTERM (abandoned), manual-mode timeout: retrying won't help
+            raise utils.RipperException(f"Error while running MakeMKV: {mkv_error}") from mkv_error
+        except Exception as mkv_error:
+            logging.exception("Unexpected error while running MakeMKV")
+            raise utils.RipperException(
+                f"Error while running MakeMKV: {type(mkv_error).__name__}: {mkv_error}") from mkv_error
+    return None
 
 
 def start_transcode(job, logfile, raw_in_path, transcode_out_path, protection):

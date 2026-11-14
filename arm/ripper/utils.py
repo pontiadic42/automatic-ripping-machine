@@ -94,6 +94,10 @@ def notify(job, title: str, body: str):
         except Exception as error:  # noqa: E722
             logging.error(f"Failed sending apprise notifications. {error}")
 
+    # ntfy, when "send every ARM notification" is on
+    from arm.automation import hooks as automation_hooks
+    automation_hooks.regular_notification(title, body)
+
 
 def bash_notify(cfg, title, body):
     # bash notifications use subprocess instead of apprise.
@@ -956,18 +960,21 @@ def apply_manual_overrides(job):
     return bool(updates)
 
 
-def check_for_wait(job):
+def check_for_wait(job, wait_time=None, force=False):
     """
     Wait if we have waiting for user input updates\n\n
     :param job: Current Job
+    :param wait_time: seconds to wait instead of MANUAL_WAIT_TIME (0 = don't wait)
+    :param force: wait even when MANUAL_WAIT is off (low identification confidence)
     :return: None
     """
+    seconds = int(job.config.MANUAL_WAIT_TIME or 0) if wait_time is None else int(wait_time)
     #  If we have waiting for user input enabled
-    if job.config.MANUAL_WAIT:
-        logging.info(f"Waiting {job.config.MANUAL_WAIT_TIME} seconds for manual override.")
+    if (job.config.MANUAL_WAIT or force) and seconds > 0:
+        logging.info(f"Waiting {seconds} seconds for manual override.")
         database_updater({"status": JobState.MANUAL_WAIT_STARTED.value}, job)
         sleep_time = 0
-        while sleep_time < job.config.MANUAL_WAIT_TIME:
+        while sleep_time < seconds:
             time.sleep(5)
             sleep_time += 5
             db.session.refresh(job)

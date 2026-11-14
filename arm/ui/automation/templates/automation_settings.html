@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block content %}
+    <div class="arm-head">
+        <h1>Automation</h1>
+        <span class="arm-faint" style="font-size:13px">Settings &gt; Automation · saved to arm.yaml</span>
+        <span class="arm-head-right"><a href="/settings">Other settings</a></span>
+    </div>
+
+    <div class="arm-auto-status">
+        <span class="arm-pill {{ 'done' if status.ntfy else 'warn' }}">Phone notifications {{ 'on' if status.ntfy else 'off' }}</span>
+        <span class="arm-pill {{ 'done' if status.jellyfin else '' }}">Jellyfin {{ 'connected' if status.jellyfin else 'off' }}</span>
+        {% if status.last.last_backup %}<span class="arm-pill">Last backup {{ status.last.last_backup }}</span>{% endif %}
+        {% if status.last.last_summary %}<span class="arm-pill">Last summary {{ status.last.last_summary }}</span>{% endif %}
+        {% if status.ntfy %}
+            <form method="post" action="{{ url_for('route_automation.test_ntfy') }}" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="arm-btn" type="submit">Send a test notification</button>
+            </form>
+        {% endif %}
+    </div>
+
+    <form method="post" class="arm-auto-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <nav class="arm-auto-toc">
+            {% for group in groups %}<a href="#g-{{ group.id }}">{{ group.title }}</a>{% endfor %}
+        </nav>
+        {% for group in groups %}
+            <section class="arm-card arm-auto-group" id="g-{{ group.id }}">
+                <h2>{{ group.title }}</h2>
+                {% for item in group.fields %}
+                    {% set s = item.s %}
+                    <div class="arm-auto-row">
+                        <label for="{{ s.key }}">
+                            <span class="arm-auto-label">{{ s.label }}</span>
+                            {% if s.help %}<span class="arm-auto-help">{{ s.help }}</span>{% endif %}
+                            <code class="arm-auto-key">{{ s.key }}</code>
+                        </label>
+                        <div class="arm-auto-input">
+                            {% if s.kind == "bool" %}
+                                <input type="checkbox" id="{{ s.key }}" name="{{ s.key }}" {{ 'checked' if item.value }}>
+                            {% elif s.kind == "choice" %}
+                                <select id="{{ s.key }}" name="{{ s.key }}" class="custom-select">
+                                    {% for choice in s.choices %}
+                                        <option value="{{ choice }}" {{ 'selected' if item.value == choice }}>{{ choice }}</option>
+                                    {% endfor %}
+                                </select>
+                            {% elif s.kind == "int" %}
+                                <input type="number" id="{{ s.key }}" name="{{ s.key }}" value="{{ item.value }}" class="form-control">
+                            {% elif s.kind == "time" %}
+                                <input type="time" id="{{ s.key }}" name="{{ s.key }}" value="{{ item.value }}" class="form-control">
+                            {% elif s.kind == "secret" %}
+                                <input type="password" id="{{ s.key }}" name="{{ s.key }}" value="" autocomplete="off"
+                                       placeholder="{{ 'Saved - leave empty to keep' if item.is_set else 'Not set' }}" class="form-control">
+                            {% else %}
+                                <input type="text" id="{{ s.key }}" name="{{ s.key }}" value="{{ item.value }}" class="form-control">
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </section>
+        {% endfor %}
+        <div class="arm-auto-save">
+            <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+    </form>
+    <script type="application/javascript">$(function () { activeTab("armsettings"); });</script>
+{% endblock %}

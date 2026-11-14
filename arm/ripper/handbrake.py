@@ -9,6 +9,7 @@ import shlex
 import arm.config.config as cfg
 
 from arm.ripper import utils
+from arm.automation import hooks as automation_hooks
 from arm.ui import app, db  # noqa E402
 from arm.models.job import JobState
 
@@ -76,8 +77,12 @@ def build_handbrake_command(srcpath, filepathname, hb_preset, hb_args, logfile,
     if track_number is not None:
         cmd += f"-t {track_number} "
 
-    cmd += f"{hb_args} " \
-           f">> {logfile} 2>&1"
+    cmd += f"{hb_args} "
+    # TRIM_TRACKS: keep only the chosen audio/subtitle languages (later options win in HandBrake)
+    trim = automation_hooks.handbrake_args(None)
+    if trim:
+        cmd += " ".join(shlex.quote(arg) for arg in trim) + " "
+    cmd += f">> {logfile} 2>&1"
 
     return cmd
 

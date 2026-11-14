@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ARM</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/arm-modern.css') }}">
+    <script>if (localStorage.getItem('darkSwitch') === 'dark') document.documentElement.setAttribute('data-theme', 'dark');</script>
+</head>
+<body style="padding: 32px 16px !important">
+<div class="arm-card" style="max-width: 420px; margin: 0 auto; padding: 20px;">
+    <p class="arm-faint" style="font-size:12px; margin:0 0 4px">ARM · job {{ job.job_id }}</p>
+    <h1 style="font-size:20px; margin:0 0 12px">{{ job.title }}{% if job.year and job.year != "0000" %} ({{ job.year }}){% endif %}</h1>
+    {% if done %}
+        <p>Done. ARM keeps this title{% if job.status in ["waiting", "active"] %} and starts ripping{% endif %}.</p>
+        <a class="arm-btn" href="/jobdetail?job_id={{ job.job_id }}">Open the job</a>
+    {% else %}
+        <p class="arm-muted">Disc label: {{ job.label or "none" }}</p>
+        <form method="post">
+            <input type="hidden" name="job" value="{{ job.job_id }}">
+            <input type="hidden" name="action" value="{{ action }}">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="from_page" value="1">
+            <button class="arm-btn arm-btn-primary" type="submit">{{ label }}</button>
+            <a class="arm-btn" href="/titlesearch?job_id={{ job.job_id }}">Pick another title</a>
+        </form>
+    {% endif %}
+</div>
+</body>
+</html>

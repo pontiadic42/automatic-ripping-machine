@@ -700,4 +700,26 @@ def get_dashboard():
         'version': version,
     }
     return {'success': True, 'mode': 'dashboard', 'drives': drives,
-            'recent': [_job_summary(job) for job in recent], 'stats': stats}
+            'recent': [_job_summary(job) for job in recent], 'stats': stats,
+            'automation': _automation_summary()}
+
+
+def _automation_summary():
+    """Confidence and open items for active jobs and the last week's jobs"""
+    from arm.automation import store, settings
+    week = datetime.datetime.now() - datetime.timedelta(days=7)
+    jobs = Job.query.filter(db.or_(Job.status.notin_([JobState.SUCCESS.value, JobState.FAILURE.value]),
+                                   Job.stop_time >= week)).all()
+    result = {}
+    for job in jobs:
+        data = store.load_job(job.job_id)
+        confidence = data.get("confidence") or {}
+        entry = {
+            "confidence": confidence.get("score"),
+            "level": "high" if confidence.get("confirmed") else confidence.get("level"),
+            "attention": data.get("attention") or [],
+            "title": job.title_manual or job.title or job.label,
+        }
+        if entry["confidence"] is not None or entry["attention"]:
+            result[str(job.job_id)] = entry
+    return {"jobs": result, "ntfy": settings.ntfy_enabled()}

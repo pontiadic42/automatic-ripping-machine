@@ -24,6 +24,7 @@ from arm.models import SystemDrives, Track
 from arm.models.job import JobState
 from arm.ripper import utils
 from arm.ripper.utils import notify
+from arm.automation import hooks as automation_hooks
 from arm.ui import db
 
 MAKEMKV_INFO_WAIT_TIME = 60  # [s]
@@ -672,12 +673,20 @@ def makemkv_mkv(job, rawpath):
     mode = utils.get_drive_mode(job.devpath)
     logging.info(f"Job running in {mode} mode")
     # Get track info form mkv rip
-    get_track_info(job.drive.mdisc, job)
+    raw_titles = get_track_info(job.drive.mdisc, job)
+    # Work out what each title is (main feature, other cut, language version, duplicate, extra, episode)
+    decisions = automation_hooks.after_track_info(job, raw_titles)
+    planned_skips = automation_hooks.apply_plan(job, decisions)
+    planned_main = automation_hooks.main_track_number(job, decisions)
     # route to ripping functions.
     if job.config.MAINFEATURE:
-        logging.info("Trying to find mainfeature (sorting by chapters desc, filesize desc, track_number asc)")
-        track = Track.query.filter_by(job_id=job.job_id).order_by(
-            Track.chapters.desc(), Track.filesize.desc(), Track.track_number.asc()).first()
+        if planned_main is not None:
+            logging.info(f"Main feature from title analysis: title {planned_main}")
+            track = Track.query.filter_by(job_id=job.job_id, track_number=planned_main).first()
+        else:
+            logging.info("Trying to find mainfeature (sorting by chapters desc, filesize desc, track_number asc)")
+            track = Track.query.filter_by(job_id=job.job_id).order_by(
+                Track.chapters.desc(), Track.filesize.desc(), Track.track_number.asc()).first()
         if track is None:
             raise utils.RipperException("MakeMKV found no titles to rip (MAINFEATURE is enabled)")
         rip_mainfeature(job, track, rawpath)
@@ -698,6 +707,11 @@ def makemkv_mkv(job, rawpath):
             notify(job, title, message)
 
             raise utils.RipperException("Manual mode: Timed out waiting for user input")
+
+    # Title analysis skips some titles (copies, other language versions): rip the rest one by one
+    elif planned_skips:
+        logging.info("Ripping the titles chosen by title analysis.")
+        process_single_tracks(job, rawpath, 'planned')
 
     # if no maximum length, process the whole disc in one command
     elif int(job.config.MAXLENGTH) > 99998:
@@ -1003,6 +1017,9 @@ class TrackInfoProcessor:
         self.stream_type = None
         self.chapters = 0
         self.filesize = 0
+        # Every attribute MakeMKV reports, per title, for title analysis:
+        # {tid: {"tinfo": {id: value}, "streams": [{id: value}, ...]}}
+        self.raw = {}
 
     def process_messages(self):
         output_types = (
@@ -1038,7 +1055,17 @@ class TrackInfoProcessor:
             assert message.tid == self.track_id, message
             self._handle_tinfo(message)
 
+    def _record(self, message):
+        entry = self.raw.setdefault(message.tid, {"tinfo": {}, "streams": []})
+        if isinstance(message, SInfo):
+            while len(entry["streams"]) <= message.sid:
+                entry["streams"].append({})
+            entry["streams"][message.sid][message.id] = message.value
+        else:
+            entry["tinfo"][message.id] = message.value
+
     def _handle_sinfo(self, message):
+        self._record(message)
         if message.id == StreamID.TYPE:
             self.stream_type = message.code
         elif self.stream_type == MAKEMKV_STREAM_CODE_TYPE_VIDEO:
@@ -1048,6 +1075,7 @@ class TrackInfoProcessor:
                 self.fps = float(message.value.split()[0])
 
     def _handle_tinfo(self, message):
+        self._record(message)
         if message.id == TrackID.FILENAME:
             # Extract filename between quotes
             self.filename = next(iter(message.value.split('"')[1::2]), message.value)
@@ -1101,6 +1129,7 @@ def get_track_info(index, job):
     """
     processor = TrackInfoProcessor(job, index)
     processor.process_messages()
+    return processor.raw
 
 
 def convert_to_seconds(hms_value):

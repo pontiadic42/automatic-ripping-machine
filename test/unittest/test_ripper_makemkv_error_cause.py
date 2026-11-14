@@ -46,9 +46,38 @@ class TestRipVisualMediaKeepsCause(unittest.TestCase):
     def test_makemkv_error_reason_is_kept(self):
         """CHECK a MakeMKV failure keeps its reason"""
         error = makemkv.MakeMkvRuntimeError(1, ["RIP_TITLE_ERROR"], output="Failed to save title 0 to file")
-        self.assertEqual(self.rip_with_makemkv_error(error),
-                         "Error while running MakeMKV: Call to MakeMKV failed with code: 1: "
-                         "Failed to save title 0 to file")
+        with patch.dict(arm_ripper.utils.cfg.arm_config, {"READ_ERROR_RETRIES": 0}):
+            self.assertEqual(self.rip_with_makemkv_error(error),
+                             "Error while running MakeMKV: Call to MakeMKV failed with code: 1: "
+                             "Failed to save title 0 to file")
+
+    def test_makemkv_failure_is_retried(self):
+        """CHECK a failed MakeMKV run is retried READ_ERROR_RETRIES times, then says what to try"""
+        error = makemkv.MakeMkvRuntimeError(1, ["RIP_TITLE_ERROR"], output="Failed to save title 0 to file")
+        job = SimpleNamespace(job_id=4)
+        with patch.dict(arm_ripper.utils.cfg.arm_config, {"READ_ERROR_RETRIES": 2}), \
+                patch.object(arm_ripper.makemkv, "makemkv", side_effect=[error, error, "/raw/out"]) as run, \
+                patch.object(arm_ripper.time, "sleep"), patch.object(arm_ripper.db.session, "commit"), \
+                patch("arm.models.track.Track.query"):
+            self.assertEqual(arm_ripper.rip_with_retries(job), "/raw/out")
+        self.assertEqual(run.call_count, 3)
+        with patch.dict(arm_ripper.utils.cfg.arm_config, {"READ_ERROR_RETRIES": 1}), \
+                patch.object(arm_ripper.makemkv, "makemkv", side_effect=error) as run, \
+                patch.object(arm_ripper.time, "sleep"), patch.object(arm_ripper.db.session, "commit"), \
+                patch("arm.models.track.Track.query"):
+            with self.assertRaises(arm_ripper.utils.RipperException) as raised:
+                arm_ripper.rip_with_retries(job)
+        self.assertEqual(run.call_count, 2)
+        self.assertIn("tried 2 times; clean the disc or try it in the other drive", str(raised.exception))
+
+    def test_sigterm_is_not_retried(self):
+        """CHECK an abandoned job (SIGTERM) stops at once"""
+        with patch.dict(arm_ripper.utils.cfg.arm_config, {"READ_ERROR_RETRIES": 3}), \
+                patch.object(arm_ripper.makemkv, "makemkv",
+                             side_effect=arm_ripper.utils.RipperException("Received SIGTERM")) as run:
+            with self.assertRaises(arm_ripper.utils.RipperException):
+                arm_ripper.rip_with_retries(SimpleNamespace(job_id=4))
+        self.assertEqual(run.call_count, 1)
 
     def test_sigterm_reason_is_kept(self):
         """CHECK an abandoned job says it received SIGTERM"""

@@ -79,6 +79,10 @@ def apply_plan(job, decisions):
         track.process = decision["rip"]
         if not decision["rip"] and decision["role"] != "short":
             skipped = True
+    # Save now: an uncommitted change here kept SQLite write-locked for the whole MakeMKV
+    # rip (15-20 min), which blocked the web UI and every other job
+    from arm.ui import db
+    db.session.commit()
     return skipped
 
 

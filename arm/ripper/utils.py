@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Collection of utility functions"""
+import contextlib
 import datetime
+import fcntl
 import os
 import logging
 import subprocess
@@ -9,6 +11,7 @@ import time
 import random
 import re
 import shlex
+import tempfile
 from logging import Logger
 from pathlib import Path, PurePath
 from math import ceil
@@ -797,6 +800,29 @@ def clean_for_filename(string):
     string = string.replace(" ", " - ")
     string = string.strip()
     return re.sub('[^\\w.() -]', '', string)
+
+
+@contextlib.contextmanager
+def device_lock(dev_path, timeout=120):
+    """
+    Hold an exclusive lock for one drive while a run checks for other runs and claims the
+    drive, so a second run on the same drive waits and then sees the first one.
+    """
+    path = os.path.join(tempfile.gettempdir(), f"arm-{os.path.basename(str(dev_path))}.lock")
+    with open(path, "a") as handle:
+        deadline = time.time() + timeout
+        while True:
+            try:
+                fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                if time.time() > deadline:
+                    raise RipperException(f"Another ARM run held the lock for {dev_path} for {timeout}s")
+                time.sleep(0.2)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 
 def duplicate_run_check(dev_path):

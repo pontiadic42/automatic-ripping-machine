@@ -215,18 +215,21 @@ def setup():
     job.arm_version = arminfo.arm_version
     arminfo.get_values()
 
-    # Sometimes drives trigger twice this stops multi runs from 1 udev trigger
-    utils.duplicate_run_check(devpath)
+    # Sometimes drives trigger twice this stops multi runs from 1 udev trigger.
+    # The check and claiming the drive happen under a per-drive lock: two runs started
+    # a fraction of a second apart both passed the check before either claimed the drive.
+    with utils.device_lock(devpath):
+        utils.duplicate_run_check(devpath)
 
-    logging.info(f"************* Starting ARM processing at {datetime.datetime.now()} *************")
-    # Set job status and start time
-    job.status = JobState.IDLE.value
-    job.start_time = datetime.datetime.now()
-    utils.database_adder(job)
-    # Sleep to lower chances of db locked - unlikely to be needed
-    time.sleep(1)
-    # Associate the job with the drive in the database
-    drive_utils.update_drive_job(job)
+        logging.info(f"************* Starting ARM processing at {datetime.datetime.now()} *************")
+        # Set job status and start time
+        job.status = JobState.IDLE.value
+        job.start_time = datetime.datetime.now()
+        utils.database_adder(job)
+        # Sleep to lower chances of db locked - unlikely to be needed
+        time.sleep(1)
+        # Associate the job with the drive in the database
+        drive_utils.update_drive_job(job)
     # Add the job.config to db
     config = Config(cfg.arm_config, job_id=job.job_id)  # noqa: F811
     # Check if the drive mode is set to manual, and load to the job config for later use

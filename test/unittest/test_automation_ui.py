@@ -65,6 +65,82 @@ class TestPhoneButtons(Temp):
         self.assertEqual(store.load_job(7).get("attention"), [])
 
 
+class TestJobActions(Temp):
+    """Banner buttons: accept, cancel, delete files, dismiss"""
+
+    def post(self, job, action, **extra):
+        query = MagicMock()
+        query.get.return_value = job
+        query.filter.return_value.count.return_value = 0
+        with patch.object(routes.Job, "query", query), patch.object(routes.db.session, "commit"), \
+                patch.dict(app.config, {"LOGIN_DISABLED": True}):
+            return self.client.post("/automation/job_action", data=dict(job=job.job_id, action=action, **extra))
+
+    def job(self, **fields):
+        job = a_job()
+        job.finished = False
+        job.path = None
+        for key, value in fields.items():
+            setattr(job, key, value)
+        return job
+
+    def test_accept_while_waiting_confirms_the_title(self):
+        job = self.job()
+        store.add_attention(7, "confidence", "Not sure")
+        response = self.post(job, "accept")
+        self.assertTrue(response.get_json()["success"])
+        self.assertEqual(job.title_manual, "It")
+        self.assertEqual(store.load_job(7)["attention"], [])
+
+    def test_accept_after_finishing_only_clears_the_banner(self):
+        job = self.job(finished=True, status="success")
+        store.add_attention(7, "confidence", "Not sure")
+        self.assertTrue(self.post(job, "accept").get_json()["success"])
+        self.assertIsNone(job.title_manual)
+        self.assertEqual(store.load_job(7)["attention"], [])
+
+    def test_dismiss_only_that_kind(self):
+        store.add_attention(7, "confidence", "Not sure")
+        store.add_attention(7, "length", "Short file", level="bad")
+        self.post(self.job(), "dismiss", kind="confidence")
+        self.assertEqual([i["kind"] for i in store.load_job(7)["attention"]], ["length"])
+
+    def test_cancel_stops_a_running_job_only(self):
+        store.add_attention(7, "confidence", "Not sure")
+        with patch("arm.ui.json_api.abandon_job", return_value={"success": True}) as abandon:
+            self.assertTrue(self.post(self.job(), "cancel").get_json()["success"])
+        abandon.assert_called_once_with("7")
+        self.assertEqual(store.load_job(7)["attention"], [])
+        with patch("arm.ui.json_api.abandon_job") as abandon:
+            response = self.post(self.job(finished=True), "cancel")
+        self.assertEqual(response.status_code, 400)
+        abandon.assert_not_called()
+
+    def test_delete_files_removes_only_a_safe_finished_folder(self):
+        completed = os.path.join(self.tmp, "completed")
+        folder = os.path.join(completed, "movies", "It (2017)")
+        os.makedirs(folder)
+        open(os.path.join(folder, "It (2017).mkv"), "w").close()
+        with patch.dict(cfg.arm_config, {"COMPLETED_PATH": completed, "JELLYFIN_URL": ""}):
+            self.assertEqual(self.post(self.job(path=folder), "delete_files").status_code, 400)  # still running
+            self.assertTrue(os.path.isdir(folder))
+            for unsafe in (completed, os.path.join(completed, "movies"), "/etc"):
+                self.assertEqual(self.post(self.job(finished=True, path=unsafe), "delete_files").status_code, 400)
+            response = self.post(self.job(finished=True, path=folder), "delete_files")
+        self.assertTrue(response.get_json()["success"])
+        self.assertFalse(os.path.exists(folder))
+        self.assertTrue(os.path.isdir(os.path.join(completed, "movies")))
+        self.assertEqual(store.load_job(7)["files_deleted"], folder)
+
+    def test_unknown_action_and_job(self):
+        self.assertEqual(self.post(self.job(), "explode").status_code, 400)
+        query = MagicMock()
+        query.get.return_value = None
+        with patch.object(routes.Job, "query", query), patch.dict(app.config, {"LOGIN_DISABLED": True}):
+            self.assertEqual(self.client.post("/automation/job_action", data={"job": 99, "action": "accept"})
+                             .status_code, 404)
+
+
 class TestSettingsPage(Temp):
 
     def test_save_writes_arm_yaml_and_keeps_secrets(self):
@@ -129,6 +205,7 @@ class TestRetitleRoute(Temp):
         completed = os.path.join(self.tmp, "completed")
         old = os.path.join(completed, "unidentified", "not identified")
         os.makedirs(old)
+        store.add_attention(8, "confidence", "ARM couldn't identify this disc. Pick the title.")
         open(os.path.join(old, "not identified.mkv"), "w").close()
         job = SimpleNamespace(job_id=8, title="not identified", year="", video_type="unknown", status="success",
                               path=old, title_manual=None, year_manual=None, imdb_id=None, poster_url=None)
@@ -142,6 +219,7 @@ class TestRetitleRoute(Temp):
             self.client.get("/updatetitle?job_id=8&title=Spirited Away&year=2001&type=movie&imdbID=tt0245429&poster=")
         new = os.path.join(completed, "movies", "Spirited Away (2001)")
         self.assertEqual(job.path, new)
+        self.assertEqual(store.load_job(8).get("attention"), [])
         self.assertTrue(os.path.isfile(os.path.join(new, "Spirited Away (2001).mkv")))
 
 

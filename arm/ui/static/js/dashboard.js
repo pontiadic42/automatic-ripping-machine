@@ -225,19 +225,73 @@
         return `<span class="arm-pill ${cls}" title="How sure ARM is about the title">${Math.round(info.confidence)}% sure</span>`;
     }
 
+    function actionButton(jobId, action, label, extra) {
+        return `<button type="button" class="arm-btn${action === "cancel" || action === "delete_files" ? " arm-btn-danger" : ""}"
+            data-job-action="${action}" data-job="${esc(jobId)}"${extra || ""}>${label}</button>`;
+    }
+
+    /** Buttons for one banner item: accept / pick / cancel or delete / dismiss */
+    function attentionButtons(jobId, info, item) {
+        const id = encodeURIComponent(jobId);
+        let html = "";
+        if (item.kind === "confidence") {
+            if (info.title_known) {
+                html += actionButton(jobId, "accept", "Accept title");
+            }
+            html += `<a class="arm-btn" href="titlesearch?job_id=${id}">Pick another</a>`;
+            if (!info.finished) {
+                html += actionButton(jobId, "cancel", "Cancel job");
+            } else if (info.has_files) {
+                html += actionButton(jobId, "delete_files", "Delete files");
+            }
+        } else {
+            html += `<a class="arm-btn" href="/jobdetail?job_id=${id}">Open</a>`;
+        }
+        html += actionButton(jobId, "dismiss", "Dismiss", ` data-kind="${esc(item.kind)}"`);
+        return html;
+    }
+
+    function jobAction(button) {
+        const action = button.dataset.jobAction;
+        const info = automationFor(button.dataset.job) || {};
+        const name = info.title || `job ${button.dataset.job}`;
+        if (action === "cancel" && !window.confirm(`Stop ${name} and eject the disc?`)) {
+            return;
+        }
+        if (action === "delete_files" &&
+                !window.confirm(`Permanently delete the files ARM ripped for ${name}? This can't be undone.`)) {
+            return;
+        }
+        const token = document.querySelector('meta[name="csrf-token"]');
+        const body = new URLSearchParams({job: button.dataset.job, action: action, kind: button.dataset.kind || ""});
+        button.disabled = true;
+        fetch("/automation/job_action", {
+            method: "POST", body: body, credentials: "same-origin",
+            headers: token ? {"X-CSRFToken": token.content} : {}
+        }).then(function (response) {
+            return response.json().catch(function () { return {success: false, message: `HTTP ${response.status}`}; });
+        }).then(function (data) {
+            $("#message1 .alert-heading").text(data.message || (data.success ? "Done" : "Something went wrong"));
+            $("#message1").toggleClass("alert-success", !!data.success).toggleClass("alert-danger", !data.success)
+                .removeClass("d-none");
+            setTimeout(function () { $("#message1").addClass("d-none"); }, 6000);
+            refreshDashboard();
+            refreshJobs();
+        }).finally(function () { button.disabled = false; });
+    }
+
     function attentionHtml(activeJobs, recent) {
         let html = "";
         const shown = {};
         // Items recorded by automation: low confidence, files cut short, stuck jobs, Jellyfin mismatches, ...
         const auto = dashboard && dashboard.automation ? dashboard.automation.jobs || {} : {};
         Object.keys(auto).forEach(function (jobId) {
-            (auto[jobId].attention || []).forEach(function (item) {
+            const info = auto[jobId];
+            (info.attention || []).forEach(function (item) {
                 shown[jobId] = true;
                 html += `<div class="arm-attn ${item.level === "bad" ? "bad" : ""}">
-                    <span><b>${esc(auto[jobId].title || "Job " + jobId)}:</b> ${esc(item.message)}</span>
-                    <span class="arm-attn-actions"><a href="/jobdetail?job_id=${encodeURIComponent(jobId)}">Open</a>
-                    ${item.kind === "confidence" ? `<a href="titlesearch?job_id=${encodeURIComponent(jobId)}">Pick another</a>` : ""}
-                    </span></div>`;
+                    <span><b>${esc(info.title || "Job " + jobId)}:</b> ${esc(item.message)}</span>
+                    <span class="arm-attn-actions">${attentionButtons(jobId, info, item)}</span></div>`;
             });
         });
         activeJobs.filter(function (job) { return job.status === "waiting" && !shown[job.job_id]; }).forEach(function (job) {
@@ -393,6 +447,7 @@
         if (typeof activeTab === "function") {
             activeTab("home");
         }
+        $(document).on("click", "[data-job-action]", function () { jobAction(this); });
         $("#exampleModal").on("show.bs.modal", function (event) {
             modalHref = $(event.relatedTarget).data("href") || "";
         });

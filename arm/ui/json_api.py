@@ -714,11 +714,15 @@ def _automation_summary():
     for job in jobs:
         data = store.load_job(job.job_id)
         confidence = data.get("confidence") or {}
+        title = job.title_manual or job.title
         entry = {
             "confidence": confidence.get("score"),
             "level": "high" if confidence.get("confirmed") else confidence.get("level"),
             "attention": data.get("attention") or [],
-            "title": job.title_manual or job.title or job.label,
+            "title": title or job.label,
+            "title_known": str(title or "").strip().lower() not in ("", "none", "not identified"),
+            "finished": job.status in (JobState.SUCCESS.value, JobState.FAILURE.value),
+            "has_files": bool(job.path and os.path.isdir(job.path) and not data.get("files_deleted")),
         }
         if entry["confidence"] is not None or entry["attention"]:
             result[str(job.job_id)] = entry

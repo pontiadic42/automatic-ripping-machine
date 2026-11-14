@@ -53,7 +53,10 @@ def _automation_view(job):
 
 
 def _retitle_finished(job, old_path, old_base):
-    """The title of a finished job changed: move and rename its files to match"""
+    """The title changed: clear "not sure" banners; for a finished job, move and rename its files to match"""
+    if getattr(job, "job_id", None) is not None:
+        from arm.automation import store
+        store.clear_attention(job.job_id, "confidence")
     if getattr(job, "status", None) != JobState.SUCCESS.value or not old_path or not old_base:
         return
     try:

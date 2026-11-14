@@ -1,8 +1,44 @@
 {% if automation %}
 <div class="arm-auto-card">
+    {% set finished = jobs.status in ["success", "fail"] %}
+    {% set title_known = (jobs.title_manual or jobs.title or "")|lower not in ["", "none", "not identified"] %}
     {% for item in automation.attention or [] %}
-        <div class="arm-attn {{ 'bad' if item.level == 'bad' }}">{{ item.message }}</div>
+        <div class="arm-attn {{ 'bad' if item.level == 'bad' }}">
+            <span>{{ item.message }}</span>
+            <span class="arm-attn-actions">
+                {% if item.kind == "confidence" %}
+                    {% if title_known %}<button type="button" class="arm-btn" data-card-action="accept">Accept title</button>{% endif %}
+                    <a class="arm-btn" href="titlesearch?job_id={{ jobs.job_id }}">Pick another</a>
+                    {% if not finished %}
+                        <button type="button" class="arm-btn arm-btn-danger" data-card-action="cancel">Cancel job</button>
+                    {% elif jobs.path and not automation.files_deleted %}
+                        <button type="button" class="arm-btn arm-btn-danger" data-card-action="delete_files">Delete files</button>
+                    {% endif %}
+                {% endif %}
+                <button type="button" class="arm-btn" data-card-action="dismiss" data-kind="{{ item.kind }}">Dismiss</button>
+            </span>
+        </div>
     {% endfor %}
+    <script type="application/javascript">
+        document.addEventListener("click", function (event) {
+            const button = event.target.closest("[data-card-action]");
+            if (!button) { return; }
+            const action = button.dataset.cardAction;
+            if (action === "cancel" && !confirm("Stop this job and eject the disc?")) { return; }
+            if (action === "delete_files" &&
+                !confirm("Permanently delete the files ARM ripped for this job? This can't be undone.")) { return; }
+            const token = document.querySelector('meta[name="csrf-token"]');
+            button.disabled = true;
+            fetch("/automation/job_action", {
+                method: "POST", credentials: "same-origin",
+                headers: token ? {"X-CSRFToken": token.content} : {},
+                body: new URLSearchParams({job: "{{ jobs.job_id }}", action: action, kind: button.dataset.kind || ""})
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                if (!data.success) { alert(data.message || "Something went wrong"); }
+                window.location.reload();
+            }).catch(function () { button.disabled = false; });
+        });
+    </script>
 
     {% if automation.confidence %}
         {% set c = automation.confidence %}

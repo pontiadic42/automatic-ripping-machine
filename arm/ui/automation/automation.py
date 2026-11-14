@@ -6,6 +6,7 @@ Automation pages:
 """
 import json
 import os
+import shutil
 import subprocess
 
 from flask import Blueprint, Response, abort, flash, redirect, render_template, request, session, url_for
@@ -58,6 +59,70 @@ def act():
         return render_template("automation_act.html", job=job, action=action, label=ACTIONS[action],
                                token=token, done=True)
     return {"success": True, "job": job_id, "action": action}
+
+
+def _deletable_folder(job):
+    """The job's output folder, if it's safe to delete: inside COMPLETED_PATH/<type>/ and not used by another job"""
+    if not job.path:
+        return None
+    completed = os.path.realpath(str(cfg.arm_config["COMPLETED_PATH"]))
+    folder = os.path.realpath(job.path)
+    relative = os.path.relpath(folder, completed)
+    if relative.startswith("..") or len(relative.split(os.sep)) < 2 or not os.path.isdir(folder):
+        return None
+    others = Job.query.filter(Job.path == job.path, Job.job_id != job.job_id, Job.status == "success").count()
+    return None if others else folder
+
+
+@route_automation.route('/automation/job_action', methods=['POST'])
+@login_required
+def job_action():
+    """
+    Buttons on the home page banner and the job page:
+    accept (keep ARM's guessed title), cancel (stop a running job), delete_files (remove a
+    finished job's output folder), dismiss (hide a banner item).
+    """
+    job_id = request.form.get("job", type=int)
+    action = request.form.get("action", "")
+    job = Job.query.get(job_id) if job_id is not None else None
+    if job is None:
+        return {"success": False, "message": "Job not found"}, 404
+    name = job.title_manual or job.title or job.label or f"job {job_id}"
+    if action == "accept":
+        if not job.finished:
+            confirm_title(job)
+            message = f"Keeping {name}. ARM starts ripping when its wait ends."
+        else:
+            store.clear_attention(job_id, "confidence")
+            message = f"Kept {name}."
+    elif action == "dismiss":
+        store.clear_attention(job_id, request.form.get("kind") or "confidence")
+        message = "Dismissed."
+    elif action == "cancel":
+        if job.finished:
+            return {"success": False, "message": "This job has already finished."}, 400
+        from arm.ui import json_api
+        result = json_api.abandon_job(str(job_id))
+        if not result.get("success"):
+            return {"success": False, "message": result.get("Error") or "Couldn't stop the job."}, 500
+        for item in store.load_job(job_id).get("attention") or []:
+            store.clear_attention(job_id, item.get("kind"))
+        message = f"Stopped {name} and ejected the disc."
+    elif action == "delete_files":
+        if not job.finished:
+            return {"success": False, "message": "Stop the job first."}, 400
+        folder = _deletable_folder(job)
+        if folder is None:
+            return {"success": False, "message": "There's no output folder ARM can safely delete for this job."}, 400
+        shutil.rmtree(folder)
+        app.logger.info(f"Job {job_id}: deleted its output folder {folder} from the web UI")
+        store.update_job(job_id, files_deleted=folder, attention=[])
+        from arm.automation import jellyfin
+        jellyfin.announce(None, folder)
+        message = f"Deleted {folder}."
+    else:
+        return {"success": False, "message": "Unknown action"}, 400
+    return {"success": True, "message": message}
 
 
 def _form_value(setting):

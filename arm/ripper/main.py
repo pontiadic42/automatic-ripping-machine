@@ -31,6 +31,9 @@ from arm.ripper import (arm_ripper, identify, logger,  # noqa: E402
                         music_brainz, utils)
 from arm.ripper.ARMInfo import ARMInfo  # noqa E402
 from arm.automation import hooks as automation_hooks  # noqa E402
+
+# Seconds to wait for a drive to report a readable disc before giving up
+DRIVE_READY_SECONDS = 45
 from arm.ui import app, constants, db  # noqa E402
 from arm.ui.settings import DriveUtils as drive_utils  # noqa E402
 
@@ -185,12 +188,14 @@ def setup():
     drive = SystemDrives.query.filter_by(mount=devpath).one()  # unique mounts
 
     # With some drives and some disks, there is a race condition between creating the Job()
-    # below and the drive being ready, so give it a chance to get ready (observed with LG SP80NB80)
-    for num in range(1, 11):
+    # below and the drive being ready, so give it a chance to get ready (observed with LG SP80NB80).
+    # Blu-ray drives can take 20-30 s to spin up and read a disc (LG WH14NS40), so wait up to 45 s.
+    for num in range(1, DRIVE_READY_SECONDS + 1):
         drive.tray_status()
         if drive.ready:
             break
-        msg = f"[{num} of 10] Drive [{drive.mount}] appears to be empty or is not ready. Waiting 1s"
+        msg = (f"[{num} of {DRIVE_READY_SECONDS}] Drive [{drive.mount}] appears to be empty or is not ready. "
+               "Waiting 1s")
         logging.info(msg)
         time.sleep(1)
     else:  # no break

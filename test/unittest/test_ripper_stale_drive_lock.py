@@ -59,8 +59,10 @@ class TestDuplicateRunCheck(unittest.TestCase):
 
     def test_live_job_still_refuses_the_disc(self):
         job = make_job()
-        with self.assertRaises(utils.RipperException):
+        # A normal exit like an empty drive (no "fatal error" notification)
+        with self.assertRaises(utils.DriveEmptyException) as raised:
             self.run_check(job)
+        self.assertIsInstance(raised.exception, utils.DuplicateRunException)
         self.drive.release_current_job.assert_not_called()
         self.assertEqual(job.status, JobState.VIDEO_RIPPING.value)
 

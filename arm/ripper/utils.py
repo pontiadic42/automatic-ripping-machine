@@ -46,6 +46,13 @@ class DriveEmptyException(RipperException):
     """
 
 
+class DuplicateRunException(DriveEmptyException):
+    """
+    Another ARM run is already processing this drive (drives often fire several udev
+    events for one disc). Also a normal exit: no "fatal error" notification.
+    """
+
+
 def notify(job, title: str, body: str):
     """
     Send notifications with apprise\n
@@ -830,7 +837,7 @@ def duplicate_run_check(dev_path):
     logging.info(f"Job was started {job_time}min ago.")
     if (job_time) < 3:
         logging.info("Job was started less than 3min ago.")
-    raise RipperException(f"Job already running on {dev_path}")
+    raise DuplicateRunException(f"Job already running on {dev_path}")
 
 
 def save_disc_poster(final_directory, job):

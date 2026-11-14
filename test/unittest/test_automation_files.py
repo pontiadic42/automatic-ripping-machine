@@ -190,6 +190,21 @@ class TestMaintenance(Temp):
         self.assertFalse(maintenance.due("summary", "08:00", now))
         self.assertTrue(maintenance.due("summary", "08:00", now + datetime.timedelta(days=1)))
 
+    def test_daily_tasks_use_the_local_clock(self):
+        """The container runs on UTC; 08:00 means 08:00 where the user is"""
+        utc_now = datetime.datetime(2026, 11, 14, 12, 0)     # 07:00 in Indianapolis
+        local = datetime.datetime(2026, 11, 14, 7, 0)
+        with patch.dict(cfg.arm_config, {"DAILY_SUMMARY_TIME": "08:00", "DB_BACKUP_ENABLED": False,
+                                         "CLEANUP_ENABLED": False, "STUCK_JOB_MINUTES": 0, "JELLYFIN_URL": ""}), \
+                patch.object(maintenance, "send_summary") as send:
+            maintenance.tick(utc_now, local)
+            send.assert_not_called()
+            maintenance.tick(utc_now + datetime.timedelta(hours=1), local + datetime.timedelta(hours=1))
+            send.assert_called_once()
+        with patch.dict(os.environ, {"ARM_LOCAL_TZ": "America/Indiana/Indianapolis"}):
+            offset = datetime.datetime.now() - maintenance._local_now()
+        self.assertGreater(offset.total_seconds(), 3 * 3600)  # container clock is UTC
+
     def test_backup_copies_db_and_prunes(self):
         db_file = cfg.arm_config["DBFILE"]
         conn = sqlite3.connect(db_file)

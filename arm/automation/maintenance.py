@@ -25,6 +25,22 @@ ACTIVE = ("ripping", "transcoding")
 
 
 def _now():
+    """Clock the database uses (ARM stores naive times in the container's time zone, UTC in Docker)"""
+    return datetime.datetime.now()
+
+
+def _local_now():
+    """
+    The user's wall clock, for the daily times (backup, summary). The container runs on UTC,
+    so the host passes its time zone in ARM_LOCAL_TZ.
+    """
+    name = os.environ.get("ARM_LOCAL_TZ", "")
+    if name:
+        try:
+            from zoneinfo import ZoneInfo
+            return datetime.datetime.now(ZoneInfo(name)).replace(tzinfo=None)
+        except Exception as error:  # noqa: BLE001
+            logging.warning(f"Unknown time zone {name!r} ({error}); using the container's clock")
     return datetime.datetime.now()
 
 
@@ -265,24 +281,29 @@ def send_summary(now=None):
 
 # ---------------------------------------------------------------- runner
 
-def tick(now=None):
+def tick(now=None, local=None):
+    """
+    :param now: database clock (job times)
+    :param local: the user's wall clock for the daily times
+    """
     from arm.models.job import Job
     now = now or _now()
+    local = local or _local_now()
     watchdog(now)
     if settings.jellyfin_enabled() and settings.get("JELLYFIN_VERIFY_MATCH"):
         for job in Job.query.filter(Job.stop_time >= now - datetime.timedelta(days=1)).all():
             jellyfin.verify(job.job_id, job)
-    if settings.get("DB_BACKUP_ENABLED") and due("backup", settings.get("DB_BACKUP_TIME"), now):
-        backup(now)
-        mark_done("backup", now)
-    if settings.get("CLEANUP_ENABLED") and due("cleanup", settings.get("DB_BACKUP_TIME"), now) and \
-            store.load_state().get("last_backup") == now.date().isoformat():
+    if settings.get("DB_BACKUP_ENABLED") and due("backup", settings.get("DB_BACKUP_TIME"), local):
+        backup(local)
+        mark_done("backup", local)
+    if settings.get("CLEANUP_ENABLED") and due("cleanup", settings.get("DB_BACKUP_TIME"), local) and \
+            store.load_state().get("last_backup") == local.date().isoformat():
         # Only after today's backup, so anything removed from the database is in a backup
         cleanup(now)
-        mark_done("cleanup", now)
-    if settings.get("DAILY_SUMMARY_ENABLED") and due("summary", settings.get("DAILY_SUMMARY_TIME"), now):
+        mark_done("cleanup", local)
+    if settings.get("DAILY_SUMMARY_ENABLED") and due("summary", settings.get("DAILY_SUMMARY_TIME"), local):
         send_summary(now)
-        mark_done("summary", now)
+        mark_done("summary", local)
 
 
 TASKS = {"tick": tick, "watchdog": watchdog, "backup": backup, "cleanup": cleanup, "summary": send_summary}

@@ -70,6 +70,17 @@ class TestRipVisualMediaKeepsCause(unittest.TestCase):
         self.assertEqual(run.call_count, 2)
         self.assertIn("tried 2 times; clean the disc or try it in the other drive", str(raised.exception))
 
+    def test_expired_makemkv_is_not_retried_and_says_so(self):
+        """CHECK an expired MakeMKV beta (exit 253, message 5021) isn't blamed on the disc"""
+        error = makemkv.MakeMkvRuntimeError(253, ["info"])
+        with patch.dict(arm_ripper.utils.cfg.arm_config, {"READ_ERROR_RETRIES": 2}), \
+                patch.object(arm_ripper.makemkv, "makemkv", side_effect=error) as run:
+            with self.assertRaises(arm_ripper.utils.RipperException) as raised:
+                arm_ripper.rip_with_retries(SimpleNamespace(job_id=4))
+        self.assertEqual(run.call_count, 1)
+        self.assertIn("too old", str(raised.exception))
+        self.assertNotIn("clean the disc", str(raised.exception))
+
     def test_sigterm_is_not_retried(self):
         """CHECK an abandoned job (SIGTERM) stops at once"""
         with patch.dict(arm_ripper.utils.cfg.arm_config, {"READ_ERROR_RETRIES": 3}), \

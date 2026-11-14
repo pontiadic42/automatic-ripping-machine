@@ -478,6 +478,8 @@ class MakeMkvRuntimeError(RuntimeError):
             logging.debug(f"MakeMKV output: {output}")
         if stderr is not None:
             logging.debug(f"MakeMKV stderr: {stderr}")
+        self.returncode = returncode
+        self.output = output
         self.message = f"Call to MakeMKV failed with code: {returncode}"
         # Add the first line of output (e.g. "0 titles were saved") so the
         # reason survives into the job log, job.errors and notifications.

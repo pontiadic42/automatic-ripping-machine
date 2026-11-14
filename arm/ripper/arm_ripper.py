@@ -110,6 +110,15 @@ def rip_visual_media(have_dupes, job, logfile, protection):
     logging.info("************* ARM processing complete *************")
 
 
+def makemkv_expired(error):
+    """
+    MakeMKV exits with 253 and "This application version is too old ... or enter a registration
+    key" (message 5021) when its beta has expired. Retrying can't help.
+    """
+    text = f"{error} {getattr(error, 'output', '') or ''}".lower()
+    return getattr(error, "returncode", None) == 253 or "too old" in text or "registration key" in text
+
+
 def rip_with_retries(job):
     """
     Run MakeMKV, retrying READ_ERROR_RETRIES times when it fails (scratched or dirty discs
@@ -123,6 +132,10 @@ def rip_with_retries(job):
         try:
             return makemkv.makemkv(job)
         except makemkv.MakeMkvRuntimeError as mkv_error:
+            if makemkv_expired(mkv_error):
+                raise utils.RipperException(
+                    "MakeMKV refuses to run: this version is too old (MakeMKV's free beta expires with each "
+                    "release). Update MakeMKV or enter a registration key to keep ripping.") from mkv_error
             # MakeMKV itself failed (read errors and the like): worth another pass
             if attempt < attempts:
                 logging.warning(f"MakeMKV failed (attempt {attempt} of {attempts}): {mkv_error}. Retrying in 30 s.")

@@ -130,6 +130,29 @@ def prior_rip(job):
     return "same" if normalize_title(job.title) in titles else "different"
 
 
+def earlier_identity(job):
+    """The newest successful, identified rip of the same disc (same DVD fingerprint), or None"""
+    if not job.crc_id:
+        return None
+    from arm.models.job import Job
+    earlier = Job.query.filter(Job.crc_id == job.crc_id, Job.status == "success", Job.job_id != job.job_id,
+                               Job.hasnicetitle.is_(True)).order_by(Job.job_id.desc()).all()
+    for other in earlier:
+        title = other.title_manual or other.title
+        if normalize_title(title) not in ("", "none", "not identified") and other.video_type != "unknown":
+            return other
+    return None
+
+
+def adopt(job, title, year, imdb_id, poster_url, video_type):
+    from arm.ripper import utils
+    utils.database_updater({
+        "title": title, "title_auto": title, "year": year, "year_auto": year, "imdb_id": imdb_id,
+        "imdb_id_auto": imdb_id, "poster_url": poster_url, "poster_url_auto": poster_url,
+        "video_type": video_type, "video_type_auto": video_type, "hasnicetitle": True,
+    }, job)
+
+
 def evaluate(job, main_seconds):
     """Score the job's current title"""
     runtime = tmdb.runtime_minutes(job.imdb_id) if main_seconds else None
@@ -172,20 +195,24 @@ def assess(job):
         main_seconds = None
     result = evaluate(job, main_seconds)
 
+    if result["score"] < settings.get("CONFIDENCE_NOTIFY_BELOW"):
+        # The same disc was ripped and identified before: use that title
+        other = earlier_identity(job)
+        if other is not None and normalize_title(other.title_manual or other.title) != normalize_title(job.title):
+            title = other.title_manual or other.title
+            logging.info(f"Same disc as job {other.job_id}, which was ripped as '{title}'; using that title")
+            adopt(job, title, other.year, other.imdb_id, other.poster_url, other.video_type)
+            retry = evaluate(job, main_seconds)
+            retry["reasons"].insert(0, f"Same disc as job {other.job_id}, which was ripped as {title}")
+            result = retry
+
     if result["score"] < settings.get("CONFIDENCE_NOTIFY_BELOW") and settings.get("RUNTIME_MATCHING"):
         candidate = runtime_candidate(job, main_seconds)
         if candidate and normalize_title(candidate["title"]) != normalize_title(job.title):
-            from arm.ripper import utils
             previous = (job.title, job.year)
             logging.info(f"Runtime match: '{candidate['title']} ({candidate['year']})' has a "
-                         f"{candidate['runtime']} min "
-                         f"runtime like the main title; was '{job.title}'")
-            utils.database_updater({
-                "title": candidate["title"], "title_auto": candidate["title"], "year": candidate["year"],
-                "year_auto": candidate["year"], "imdb_id": candidate["imdb_id"], "imdb_id_auto": candidate["imdb_id"],
-                "poster_url": candidate["poster_url"], "poster_url_auto": candidate["poster_url"],
-                "video_type": "movie", "video_type_auto": "movie", "hasnicetitle": True,
-            }, job)
+                         f"{candidate['runtime']} min runtime like the main title; was '{job.title}'")
+            adopt(job, candidate["title"], candidate["year"], candidate["imdb_id"], candidate["poster_url"], "movie")
             retry = evaluate(job, main_seconds)
             retry["reasons"].insert(0, f"Picked by runtime instead of '{previous[0]}'")
             result = retry
@@ -199,14 +226,21 @@ def assess(job):
 def ask_user(job, result, wait_seconds):
     """Low confidence: send the phone notification with Confirm / Pick another"""
     from arm.automation import notify
-    store.add_attention(job.job_id, "confidence",
-                        f"Not sure this is {job.title} ({result['score']}/100). Confirm or pick another title.")
-    title = f"Is this {job.title}" + (f" ({job.year})" if job.year and job.year != "0000" else "") + "?"
     minutes = max(1, round(wait_seconds / 60))
-    body = (f"{result['score']}/100 sure. " + "; ".join(result["reasons"][:3]) +
-            f". ARM rips with this title in {minutes} min unless you change it.")
+    pick = notify.view("Pick the title", notify.arm_url(f"/titlesearch?job_id={job.job_id}"))
+    if normalize_title(job.title) in ("", "none", "not identified") or not job.hasnicetitle:
+        store.add_attention(job.job_id, "confidence", "ARM couldn't identify this disc. Pick the title.")
+        title = "Which disc is this?"
+        body = (f"ARM couldn't identify the disc in {job.devpath} (label: {job.label or 'none'}). "
+                f"It rips it as unidentified in {minutes} min unless you pick the title.")
+        actions = [pick]
+    else:
+        store.add_attention(job.job_id, "confidence",
+                            f"Not sure this is {job.title} ({result['score']}/100). Confirm or pick another title.")
+        title = f"Is this {job.title}" + (f" ({job.year})" if job.year and job.year != "0000" else "") + "?"
+        body = (f"{result['score']}/100 sure. " + "; ".join(result["reasons"][:3]) +
+                f". ARM rips with this title in {minutes} min unless you change it.")
+        actions = [notify.http("Yes, that's it", notify.action_url(job.job_id, "confirm")), pick]
     notify.in_app(title, body)
     notify.send(title, body, priority="high", tags=["dvd", "question"], click=notify.job_link(job.job_id),
-                icon=job.poster_url,
-                actions=[notify.http("Yes, that's it", notify.action_url(job.job_id, "confirm")),
-                         notify.view("Pick another", notify.arm_url(f"/titlesearch?job_id={job.job_id}"))])
+                icon=job.poster_url, actions=actions)

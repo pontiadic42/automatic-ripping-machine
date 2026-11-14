@@ -104,6 +104,35 @@ class TestAssess(TempStore):
         self.assertIn("Picked by runtime", result["reasons"][0])
         self.assertEqual(store.load_job(5)["confidence"]["score"], result["score"])
 
+    def test_unlabelled_disc_ripped_before_gets_its_earlier_title(self):
+        """Real case: an unlabelled It Chapter Two DVD; the same disc (same CRC) was ripped as It Chapter Two"""
+        disc = job(label="not identified", title="not identified", year=None, imdb_id=None, hasnicetitle=False,
+                   crc_id="fb33966dc04c6fac", video_type="unknown")
+        earlier = SimpleNamespace(job_id=22, title="It Chapter Two", title_manual=None, year="2019",
+                                  imdb_id="tt7349950", poster_url="https://image.tmdb.org/x.jpg", video_type="movie")
+
+        def update(args, target):
+            for key, value in args.items():
+                setattr(target, key, value)
+
+        with patch.object(confidence, "main_title_seconds", return_value=10152), \
+                patch.object(confidence.tmdb, "runtime_minutes", return_value=169), \
+                patch.object(confidence, "earlier_identity", return_value=earlier), \
+                patch.object(confidence, "prior_rip", side_effect=lambda j: "same" if j.title == "It Chapter Two"
+                             else None), \
+                patch.object(utils, "database_updater", side_effect=update):
+            result = confidence.assess(disc)
+        self.assertEqual((disc.title, disc.year, disc.video_type), ("It Chapter Two", "2019", "movie"))
+        self.assertEqual(result["level"], "high")
+        self.assertIn("Same disc as job 22", result["reasons"][0])
+
+    def test_unidentified_disc_asks_which_disc(self):
+        disc = job(label="not identified", title="not identified", hasnicetitle=False)
+        with patch.object(notify, "in_app") as in_app:
+            confidence.ask_user(disc, {"score": 5, "reasons": ["ARM couldn't find a title for this disc"]}, 900)
+        self.assertEqual(in_app.call_args.args[0], "Which disc is this?")
+        self.assertIn("couldn't identify", store.load_job(5)["attention"][0]["message"])
+
     def test_manual_title_is_trusted(self):
         result = confidence.assess(job(title_manual="Whatever"))
         self.assertEqual(result["level"], "high")

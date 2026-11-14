@@ -20,8 +20,25 @@ _lock = threading.Lock()
 
 def base_dir():
     path = os.path.join(os.path.dirname(str(cfg.arm_config["DBFILE"])), "automation")
-    os.makedirs(os.path.join(path, "jobs"), exist_ok=True)
+    if not os.path.isdir(os.path.join(path, "jobs")):
+        os.makedirs(os.path.join(path, "jobs"), exist_ok=True)
+        _share(path, 0o775)
+        _share(os.path.join(path, "jobs"), 0o775)
     return path
+
+
+def _share(path, mode):
+    """
+    The ripper runs as root, the web UI as the arm user: give files the database's owner
+    so both can read and update them.
+    """
+    try:
+        os.chmod(path, mode)
+        if os.geteuid() == 0:
+            owner = os.stat(str(cfg.arm_config["DBFILE"]))
+            os.chown(path, owner.st_uid, owner.st_gid)
+    except OSError as error:
+        logging.debug(f"Couldn't set the owner of {path}: {error}")
 
 
 def _read(path, default):
@@ -41,6 +58,7 @@ def _write(path, data):
     try:
         with os.fdopen(fd, "w") as handle:
             json.dump(data, handle, indent=2, sort_keys=True, default=str)
+        _share(tmp, 0o664)
         os.replace(tmp, path)
     except BaseException:
         try:
@@ -125,4 +143,5 @@ def secret():
             return handle.read().strip()
     with os.fdopen(fd, "w") as handle:
         handle.write(value)
+    _share(path, 0o640)
     return value

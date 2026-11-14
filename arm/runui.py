@@ -17,12 +17,39 @@ from arm.ui import app  # noqa E402
 shutdown_requested = False
 
 
-def startup():
-    """ARM UI Startup check on database config"""
+def startup(attempts=6, wait=5):
+    """
+    ARM UI Startup check on database config.
+
+    The drive rescan writes to the database. While a rip is running the ripper often holds
+    the SQLite write lock, and a "database is locked" error here made the UI crash and
+    restart in a loop. So: skip the rescan while a job is active (drives can't change
+    mid-rip), and otherwise retry for a while, then start without it.
+    """
+    import time
+    from sqlalchemy.exc import OperationalError
+    from arm.models.job import Job, JobState
+    from arm.ui import db
+
     db_update = arm.ui.utils.arm_db_check()
-    if db_update["db_current"]:
-        app.logger.info("Updating Optical Drives")
-        arm.ui.settings.DriveUtils.drives_update(startup=True)
+    if not db_update["db_current"]:
+        return
+    active = Job.query.filter(Job.status.notin_([JobState.SUCCESS.value, JobState.FAILURE.value])).count()
+    if active:
+        app.logger.info(f"{active} job(s) running; not rescanning the optical drives now")
+        return
+    for attempt in range(1, attempts + 1):
+        try:
+            app.logger.info("Updating Optical Drives")
+            arm.ui.settings.DriveUtils.drives_update(startup=True)
+            return
+        except OperationalError as error:
+            db.session.rollback()
+            if "locked" not in str(error) or attempt == attempts:
+                app.logger.warning(f"Couldn't update the optical drives ({error.orig}); starting without it")
+                return
+            app.logger.info(f"Database busy, retrying the drive update in {wait}s ({attempt}/{attempts})")
+            time.sleep(wait)
 
 
 def handle_shutdown(signum, frame):
